@@ -1,0 +1,20 @@
+<?xml version="1.0" ?>
+<launch>
+
+<!-- <group ns="polishing"> -->
+	<!-- Run rqt configure for dynamic reconfiguration of parameters  -->
+    <!-- <node name="rqt_reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure"/> -->
+	<param name="ready" type="bool" value="false"/>
+
+	<!-- Move to desired joint configuration -->
+    <node name="moveToDesiredJoints" pkg="test_polishing" type="moveToDesiredJoints" args="0 0 0 -120 0 60 0" output="screen"/>
+
+	<!-- Run foot mouse interface node -->
+    <node name="footMouseInterface" pkg="foot_interfaces" type="footMouseInterface" output="screen"/>
+
+	<!-- Run foot mouse controller -->
+    <node name="footMouseController" pkg="foot_interfaces" type="footMouseController" output="screen"/>
+
+<!-- </group> -->
+
+</launch>

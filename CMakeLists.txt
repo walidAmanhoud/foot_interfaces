@@ -1,0 +1,46 @@
+cmake_minimum_required(VERSION 2.8.3)
+
+project(foot_interfaces)
+
+# Add support for c++11
+add_definitions(-std=c++11)
+
+# Find required packages
+find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  rospy
+  std_msgs
+  message_generation
+  kdl_parser
+  dynamic_reconfigure
+)
+
+add_message_files(
+   FILES
+   FootMouseMsg.msg
+)
+
+
+## Generate added messages and services
+generate_messages(DEPENDENCIES std_msgs)
+
+# Generate dynamic reconfigure parameters
+generate_dynamic_reconfigure_options(cfg/footMouseController_params.cfg cfg/footMouseInterface_params.cfg)
+
+catkin_package(
+  INCLUDE_DIRS include
+  LIBRARIES ${PROJECT_NAME}
+  CATKIN_DEPENDS roscpp rospy std_msgs message_generation kdl_parser dynamic_reconfigure
+  # DEPENDS Eigen
+ )
+
+include_directories(include ${catkin_INCLUDE_DIRS})
+
+# Generate executable
+add_executable(footMouseInterface src/footMouseInterface_node.cpp src/FootMouseInterface.cpp)
+target_link_libraries(footMouseInterface ${catkin_LIBRARIES})
+add_dependencies(footMouseInterface ${PROJECT_NAME}_gencpp)
+
+add_executable(footMouseController src/footMouseController_node.cpp src/FootMouseController.cpp)
+target_link_libraries(footMouseController ${catkin_LIBRARIES})
+add_dependencies(footMouseController ${PROJECT_NAME}_gencpp)
