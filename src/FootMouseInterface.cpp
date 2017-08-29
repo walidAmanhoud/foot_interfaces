@@ -14,13 +14,13 @@ FootMouseInterface::FootMouseInterface(ros::NodeHandle &n, float frequency):
 }
 
 
-bool FootMouseInterface::init() 
+bool FootMouseInterface::init(std::string eventPath) 
 {
 
   // Pulibsher definition
   _pubFootMouseData = _n.advertise<foot_interfaces::FootMouseMsg>("foot_mouse", 1);
 
-  if((_fd = open("/dev/input/event10", O_RDONLY)) == -1) 
+  if((_fd = open(eventPath.c_str(), O_RDONLY)) == -1) 
   {
     return false;
   }

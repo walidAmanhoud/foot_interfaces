@@ -21,14 +21,18 @@
 #include "foot_interfaces/FootMouseMsg.h"
 #include "foot_interfaces/footMouseController_paramsConfig.h"
 
+#include "geometry_msgs/PointStamped.h"
+#include "nav_msgs/Path.h"
+
 // Max cursor value of the foot mouse
 #define MAX_XY_REL 127
+#define MAX_FRAME 200
 
 
 class FootMouseController 
 {
 
-	private:
+	protected:
 
 		// ROS variables
 		ros::NodeHandle _n;
@@ -67,6 +71,8 @@ class FootMouseController
 		Eigen::Vector3f _omegades;		// Desired angular velocity [rad/s] (3x1)
 		Eigen::Vector4f _qcur;				// Current end effector quaternion (4x1)
 		Eigen::Vector4f _qdes;				// Desired end effector quaternion (4x1)
+		Eigen::Vector3f _attractorPosition;				// Current position [m] (3x1)
+
 
 		// Foot mouse controller configuration variables
 		float _convergenceRate;				// Convergence rate of the DS
@@ -82,6 +88,7 @@ class FootMouseController
 		// Class variables
 		std::mutex _mutex;
 
+		
 	public:
 
 		// Class constructor
@@ -96,6 +103,11 @@ class FootMouseController
 		// Run node main loop
 		void run();
 
+	protected:
+
+		// Compute quaternion product
+		Eigen::Vector4f quaternionProduct(Eigen::Vector4f q1, Eigen::Vector4f q2);
+	
 	private:
 
 		// Callback to update real robot pose
@@ -108,22 +120,35 @@ class FootMouseController
 		void publishData();
 
 		// Process button A/B event of the foot mouse
-		void processABButtonEvent(int value, bool newEvent, int direction);
+		virtual void processABButtonEvent(int value, bool newEvent, int direction);
 
 		// Process button wheel event of the foot mouse
 		void processWheelEvent(int value, bool newEvent);
 
 		// Process cursor event of the foot mouse
-		void processCursorEvent(float relX, float relY, bool newEvent);
+		virtual void processCursorEvent(float relX, float relY, bool newEvent);
+
+		virtual void processRightClickEvent(int value, bool newEvent);
 
 		// Compute command to be send to robot controller
-		void computeCommand();
-
-		// Compute quaternion product
-		Eigen::Vector4f quaternionProduct(Eigen::Vector4f q1, Eigen::Vector4f q2);
+		virtual void computeCommand();
 
 		// Dynamic reconfigure callback
 		void dynamicReconfigureCallback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level);
+    
+
+    ros::Publisher _pubAttractorPosition;
+    ros::Publisher _pubDesiredPath;
+    bool _start;
+    bool _rightClick;
+
+    pthread_t _thread;
+    
+    static void* startPathPublishingLoop(void* ptr);
+    void pathPublishingLoop();
+    void publishFuturePath();
+    nav_msgs::Path _msgDesiredPath;
+    int _count;
 
 };
 

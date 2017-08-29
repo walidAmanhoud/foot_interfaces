@@ -8,9 +8,23 @@ int main(int argc, char **argv)
   ros::NodeHandle n;
   float frequency = 500.0f;
 
+  // Read
+  std::string eventPath;
+
+  if (argc == 2)
+  {
+      /* code */
+    eventPath = argv[1];
+  }
+  else
+  {
+    std::cerr << "Please specify event path: /dev/input/event.. " << std::endl;
+    return 0;
+  }
+
   FootMouseInterface footMouseInterface(n,frequency);
  
-  if (!footMouseInterface.init()) 
+  if (!footMouseInterface.init(eventPath)) 
   {
     return -1;
   }

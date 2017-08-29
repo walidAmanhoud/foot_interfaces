@@ -55,7 +55,7 @@ class FootMouseInterface
 		FootMouseInterface(ros::NodeHandle &n, float frequency);
 
 		// Initialize node
-		bool init();
+		bool init(std::string eventPath);
 
 		// Run node main loop
 		void run();

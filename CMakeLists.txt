@@ -44,3 +44,8 @@ add_dependencies(footMouseInterface ${PROJECT_NAME}_gencpp)
 add_executable(footMouseController src/footMouseController_node.cpp src/FootMouseController.cpp)
 target_link_libraries(footMouseController ${catkin_LIBRARIES})
 add_dependencies(footMouseController ${PROJECT_NAME}_gencpp)
+
+
+add_executable(footMouseSharedControl src/footMouseSharedControl_node.cpp src/FootMouseSharedControl.cpp src/FootMouseController.cpp)
+target_link_libraries(footMouseSharedControl ${catkin_LIBRARIES})
+add_dependencies(footMouseSharedControl ${PROJECT_NAME}_gencpp)

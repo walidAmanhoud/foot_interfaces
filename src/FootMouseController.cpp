@@ -28,6 +28,7 @@ bool FootMouseController::init()
 	_omegades.setConstant(0.0f);
 	_qcur.setConstant(0.0f);
 	_qdes.setConstant(0.0f);
+	_attractorPosition.setConstant(0.0f);
 
 	if (!initROS()) 
 	{
@@ -49,10 +50,27 @@ bool FootMouseController::initROS()
 	_pubDesiredPose = _n.advertise<geometry_msgs::Pose>("fm", 1);	
 	_pubDesiredTwist = _n.advertise<geometry_msgs::Twist>("/lwr/joint_controllers/passive_ds_command_vel", 1);
 	_pubDesiredOrientation = _n.advertise<geometry_msgs::Quaternion>("/lwr/joint_controllers/passive_ds_command_orient", 1);
+
+	_pubAttractorPosition = _n.advertise<geometry_msgs::PointStamped>("ds/attractorPosition", 1);
+	_pubDesiredPath = _n.advertise<nav_msgs::Path>("ds/desiredPath", 1);
+
 		
 	// Dynamic reconfigure definition
 	_dynRecCallback = boost::bind(&FootMouseController::dynamicReconfigureCallback, this, _1, _2);
 	_dynRecServer.setCallback(_dynRecCallback);
+
+
+	// nav_msgs::Path msgDesiredPath;
+	_msgDesiredPath.poses.resize(MAX_FRAME);
+
+	_start = true;
+	_rightClick = false;
+	_count = 0;
+
+  if(pthread_create(&_thread, NULL, &FootMouseController::startPathPublishingLoop, this))
+  {
+      throw std::runtime_error("Cannot create reception thread");   
+  }
 
 	if (_n.ok()) 
 	{ 
@@ -85,6 +103,9 @@ void FootMouseController::run()
 
 		_loopRate.sleep();
 	}
+
+	_start = false;
+  pthread_join(_thread,NULL);
 }
 
 void  FootMouseController::computeCommand()
@@ -131,6 +152,11 @@ void  FootMouseController::computeCommand()
 		case foot_interfaces::FootMouseMsg::FM_BTN_B:
 		{
 			processABButtonEvent(buttonState,newEvent,1.0f);
+			break;
+		}
+		case foot_interfaces::FootMouseMsg::FM_RIGHT_CLICK:
+		{
+			processRightClickEvent(buttonState,newEvent);
 			break;
 		}
 		case foot_interfaces::FootMouseMsg::FM_CURSOR:
@@ -241,13 +267,19 @@ void FootMouseController::processABButtonEvent(int value, bool newEvent, int dir
 			if(value>0) // Button pressed
 			{
 				// Update desired z velocity and position
+				_count++;
+				if(_count>MAX_XY_REL)
+				{
+					_count = MAX_XY_REL;
+				}
 				_buttonPressed = true;
-				_vdes(2) = direction*_zVelocity;
+				_vdes(2) = direction*_zVelocity*_count/MAX_XY_REL;
 				_pdes(2) = _pcur(2);
 			}
 			else // Button released
 			{
 				// Track desired position
+				_count = 0;
 				_buttonPressed = false;
 				_vdes(2) = -_convergenceRate*(_pcur(2)-_pdes(2));
 			}
@@ -404,6 +436,64 @@ void FootMouseController::processCursorEvent(float relX, float relY, bool newEve
 	}
 }
 
+void FootMouseController::processRightClickEvent(int value, bool newEvent)
+{
+
+	if(!_firstButton)
+	{
+		_firstButton = true;
+	}
+
+	if(!newEvent) // No new event received
+	{
+		// Track desired position
+		_vdes = -_convergenceRate*(_pcur-_pdes);
+		_rightClick = false;
+	}
+	else
+	{
+		float alpha = 4.0f;
+		float omega = M_PI;
+		float r = 0.05f;
+
+		if(value == 1) // Button pressed
+		{
+			// Update desired z velocity and position
+			_buttonPressed = true;
+			_attractorPosition = _pcur;
+			_pdes = _pcur;
+			_vdes = -_convergenceRate*(_pcur-_attractorPosition);
+			_rightClick = true;
+		}
+		else if(value == 2)
+		{
+			Eigen::Vector3f x = _pcur-_attractorPosition;
+			float R = sqrt(x(0) * x(0) + x(1) * x(1));
+			float T = atan2(x(1), x(0));
+			float vx = -alpha*(R-r) * cos(T) - R * omega * sin(T);
+			float vy = -alpha*(R-r) * sin(T) + R * omega * cos(T);
+			float vz = -alpha*x(2);
+
+			_vdes << vx, vy, vz;
+
+			if (_vdes.norm() > 0.15f) 
+			{
+				_vdes = _vdes / _vdes.norm()*0.15f;
+			}
+
+			_rightClick = true;
+		}
+		else // Button released
+		{
+			// Track desired position
+			_buttonPressed = false;
+			_pdes = _pcur;
+			_vdes = -_convergenceRate*(_pcur-_pdes);
+			_rightClick = false;
+		}
+	}
+}
+
 
 Eigen::Vector4f FootMouseController::quaternionProduct(Eigen::Vector4f q1, Eigen::Vector4f q2)
 {
@@ -445,5 +535,79 @@ void FootMouseController::dynamicReconfigureCallback(foot_interfaces::footMouseC
 	if (_angularVelocityLimit < 0) 
 	{
 		ROS_ERROR("RECONFIGURE: The limit for angular velocity cannot be negative!");
+	}
+}
+
+void* FootMouseController::startPathPublishingLoop(void* ptr)
+{
+    reinterpret_cast<FootMouseController *>(ptr)->pathPublishingLoop();  
+}
+
+
+void FootMouseController::pathPublishingLoop()
+{
+	while(_start)
+	{
+		if(_rightClick)
+		{
+			publishFuturePath();	
+		}
+	}
+	std::cerr << "END path publishing thread" << std::endl;
+}
+
+void FootMouseController::publishFuturePath() 
+{
+	geometry_msgs::PointStamped msg;
+
+	msg.header.frame_id = "world";
+	msg.header.stamp = ros::Time::now();
+	msg.point.x = _attractorPosition(0);
+	msg.point.y = _attractorPosition(1);
+	msg.point.z = _attractorPosition(2);
+
+	_pubAttractorPosition.publish(msg);
+
+
+
+	_msgDesiredPath.header.stamp = ros::Time::now();
+	_msgDesiredPath.header.frame_id = "world";
+
+	Eigen::Vector3f simulatedPose = _pcur;
+	Eigen::Vector3f vsim;
+
+	vsim.setConstant(0.0f);
+
+	float alpha = 4.0f;
+	float omega = M_PI;
+	float r = 0.05f;
+
+	for (int frame = 0; frame < MAX_FRAME; frame++)
+	{
+
+		Eigen::Vector3f x = simulatedPose-_attractorPosition;
+		float R = sqrt(x(0) * x(0) + x(1) * x(1));
+		float T = atan2(x(1), x(0));
+		float vx = -alpha*(R-r) * cos(T) - R * omega * sin(T);
+		float vy = -alpha*(R-r) * sin(T) + R * omega * cos(T);
+		float vz = -alpha*x(2);
+
+		vsim << vx, vy, vz;
+
+		if (vsim.norm() > 0.15f) 
+		{
+			vsim = vsim / vsim.norm()*0.15f;
+		}
+
+		simulatedPose +=  vsim* _dt * 20;
+
+		_msgDesiredPath.poses[frame].header.stamp = ros::Time::now();
+		_msgDesiredPath.poses[frame].header.frame_id = "world";
+		_msgDesiredPath.poses[frame].pose.position.x = simulatedPose(0);
+		_msgDesiredPath.poses[frame].pose.position.y = simulatedPose(1);
+		_msgDesiredPath.poses[frame].pose.position.z = simulatedPose(2);
+
+		_pubDesiredPath.publish(_msgDesiredPath);
+
 	}
 }
