@@ -3,6 +3,8 @@
 
 #include "FootMouseController.h"
 
+#define NB_TASKS 1
+
 class FootMouseSharedControl: public FootMouseController 
 {
 
@@ -14,12 +16,19 @@ class FootMouseSharedControl: public FootMouseController
 		float _dt;
 
 		Eigen::Vector3f _vuser;
-		Eigen::Vector3f _vtask;
-		Eigen::Vector3f _taskAttractor;
+		Eigen::Vector3f _vtask[NB_TASKS];
+		Eigen::Vector3f _taskAttractor[NB_TASKS];
 
 		float _alpha = 0.0f;
 		float _d1 = 0.0f;
 		float _d2 = 0.2f;
+
+		int _taskId;
+		ros::Publisher _pubtaskAttractor[NB_TASKS];
+
+		geometry_msgs::PointStamped _msgTaskAttractor[NB_TASKS];
+
+
 
 	public:
 
@@ -37,6 +46,8 @@ class FootMouseSharedControl: public FootMouseController
 		void processRightClickEvent(int value, bool newEvent);
 
 		void processCursorEvent(float relX, float relY, bool newEvent);
+
+		void publishData();
 
 
 

@@ -117,7 +117,7 @@ class FootMouseController
 		void updateFootMouseData(const foot_interfaces::FootMouseMsg::ConstPtr& msg);
 
 		// Publish data to topics
-		void publishData();
+		virtual void publishData();
 
 		// Process button A/B event of the foot mouse
 		virtual void processABButtonEvent(int value, bool newEvent, int direction);

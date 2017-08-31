@@ -8,9 +8,20 @@ FootMouseSharedControl::FootMouseSharedControl(ros::NodeHandle &n, double freque
 	_dt(1 / frequency)
 {
 	_vuser.setConstant(0.0f);
-	_vtask.setConstant(0.0f);
+	
+  for(int k = 0; k < NB_TASKS; k++)
+  {
+    _vtask[k].setConstant(0.0f);
+  }
 
-  _taskAttractor << -0.34f, 0.3f, 0.44f;
+  _taskId = 0;
+
+  _taskAttractor[0] << -0.34f, 0.3f, 0.35f;
+  // _taskAttractor[1] << -0.34f, -0.3f, 0.35f;
+
+  _pubtaskAttractor[0] = _n.advertise<geometry_msgs::PointStamped>("footMouseSharedControl/taskAttractor1", 1);
+  _pubtaskAttractor[1] = _n.advertise<geometry_msgs::PointStamped>("footMouseSharedControl/taskAttractor2", 1);
+
 }
 
 
@@ -84,25 +95,72 @@ void  FootMouseSharedControl::computeCommand()
 
 	}
 
-
   computeTaskVelocity();
 
 	computeAutonomy();
+
   std::cerr << "alpha:" << _alpha << std::endl;
-  std::cerr << "vuser:" << _vuser.transpose() << std::endl;
-  std::cerr << "vtask:" << _vtask.transpose() << std::endl;
-  _vdes = (1.0f-_alpha)*_vuser+_alpha*_vtask;
+  std::cerr << "vuser: " << _vuser.transpose() << std::endl;
+
+  std::cerr << "vtask " <<  _taskId << ": "<<  _vtask[_taskId].transpose() << std::endl;
+
+  _vdes = (1.0f-_alpha)*_vuser+_alpha*_vtask[_taskId];
 }
 
 void FootMouseSharedControl::computeAutonomy()
 {
 
-  float d = (_taskAttractor-_pcur).norm();
-  _alpha = std::exp(-(d-_d1)/_d2-2.0f*_vuser.norm());
   
-  if(_alpha>1.0f)
+  Eigen::VectorXf d, c;
+  d.resize(NB_TASKS);
+  c.resize(NB_TASKS);
+
+  for(int k =0; k < NB_TASKS; k++)
   {
-    _alpha = 1.0f;
+
+    d(k) = (_taskAttractor[k]-_pcur).norm();
+    Eigen::Vector3f vu, vt;
+
+    if(_vuser.norm()> 1e-6)
+    {
+      vu = _vuser/_vuser.norm();
+    }
+    else
+    {
+      vu.setConstant(0.0f);
+    }
+
+    if(_vtask[k].norm()> 1e-6)
+    {
+      vt = _vtask[k]/_vtask[k].norm();
+    }
+    else
+    {
+      vt.setConstant(0.0f);
+    }
+
+
+    float ch = vt.dot(vu);
+    float ct = std::exp(-(d(k)-_d1)/_d2);
+    
+    c(k) = ch+ct;
+    std::cerr << "c" << k << ": " << c(k) << " ch: " << ch <<" ct: " << ct << std::endl;
+    // _alpha = 
+  }
+
+  // _alpha = std::exp(-(d-_d1)/_d2-2.0f*_vuser.norm());
+
+  // _alpha = (_vuser/_vuser.norm()).dot(_vtask/_vtask.norm())+std::exp(-(d-_d1)/_d2);
+
+  _alpha = c.maxCoeff(&_taskId);
+  
+  if(_alpha>0.8f)
+  {
+    _alpha = 0.8f;
+  }
+  else if(_alpha < 0.0f)
+  {
+    _alpha = 0.0f;
   }
 
 }
@@ -114,18 +172,23 @@ void FootMouseSharedControl::computeTaskVelocity()
     float omega = M_PI;
     float r = 0.05f;
 
-    Eigen::Vector3f x = _pcur-_taskAttractor;
-    float R = sqrt(x(0) * x(0) + x(1) * x(1));
-    float T = atan2(x(1), x(0));
-    float vx = -alpha*(R-r) * cos(T) - R * omega * sin(T);
-    float vy = -alpha*(R-r) * sin(T) + R * omega * cos(T);
-    float vz = -alpha*x(2);
-
-    _vtask << vx, vy, vz;
-
-    if (_vtask.norm() > 0.15f) 
+    for(int k =0; k < NB_TASKS; k++)
     {
-      _vtask = _vtask / _vtask.norm()*0.15f;
+      Eigen::Vector3f x = _pcur-_taskAttractor[k];
+      float R = sqrt(x(0) * x(0) + x(1) * x(1));
+      float T = atan2(x(1), x(0));
+      float vx = -alpha*(R-r) * cos(T) - R * omega * sin(T);
+      float vy = -alpha*(R-r) * sin(T) + R * omega * cos(T);
+      float vz = -alpha*x(2);
+      // float vx = -alpha*x(0);
+      // float vy = -alpha*x(1);
+      // float vz = -alpha*x(2);
+      _vtask[k] << vx, vy, vz;
+
+      if (_vtask[k].norm() > 0.15f) 
+      {
+        _vtask[k] = _vtask[k] / _vtask[k].norm()*0.15f;
+      }
     }
 
 }
@@ -179,4 +242,63 @@ void FootMouseSharedControl::processCursorEvent(float relX, float relY, bool new
       _vuser(0) = 0.0f;
 		}
 	}	
+}
+
+void FootMouseSharedControl::publishData()
+{
+    _mutex.lock();
+
+  // Publish desired pose
+  _msgDesiredPose.position.x = _pdes(0);
+  _msgDesiredPose.position.y = _pdes(1);
+  _msgDesiredPose.position.z = _pdes(2);
+  _msgDesiredPose.orientation.w = _qdes(0);
+  _msgDesiredPose.orientation.x = _qdes(1);
+  _msgDesiredPose.orientation.y = _qdes(2);
+  _msgDesiredPose.orientation.z = _qdes(3);
+
+  _pubDesiredPose.publish(_msgDesiredPose);
+
+  // Publish desired twist (passive ds controller)
+  _msgDesiredTwist.linear.x  = _vdes(0);
+  _msgDesiredTwist.linear.y  = _vdes(1);
+  _msgDesiredTwist.linear.z  = _vdes(2);
+
+  // Convert desired end effector frame angular velocity to world frame
+  Eigen::Matrix3f tempM; 
+  Eigen::Vector3f tempV;
+  tempM << _Rcur.data[0], _Rcur.data[1], _Rcur.data[2],
+           _Rcur.data[3], _Rcur.data[4], _Rcur.data[5],
+           _Rcur.data[6], _Rcur.data[7], _Rcur.data[8];
+
+  tempV = tempM*_omegades;
+  _msgDesiredTwist.angular.x = tempV(0);
+  _msgDesiredTwist.angular.y = tempV(1);
+  _msgDesiredTwist.angular.z = tempV(2);
+
+  _pubDesiredTwist.publish(_msgDesiredTwist);
+
+  // Publish desired orientation
+  _msgDesiredOrientation.w = _qdes(0);
+  _msgDesiredOrientation.x = _qdes(1);
+  _msgDesiredOrientation.y = _qdes(2);
+  _msgDesiredOrientation.z = _qdes(3);
+
+  _pubDesiredOrientation.publish(_msgDesiredOrientation);
+
+
+  for(int k =0; k < NB_TASKS; k++)
+  {
+  _msgTaskAttractor[k].header.frame_id = "world";
+  _msgTaskAttractor[k].header.stamp = ros::Time::now();
+  _msgTaskAttractor[k].point.x = _taskAttractor[k](0);
+  _msgTaskAttractor[k].point.y = _taskAttractor[k](1);
+  _msgTaskAttractor[k].point.z = _taskAttractor[k](2);
+  _pubtaskAttractor[k].publish(_msgTaskAttractor[k]);
+    
+  }
+
+  _mutex.unlock();
+
+
 }
