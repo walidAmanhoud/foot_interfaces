@@ -133,8 +133,9 @@ class FootMouseController
 		// Compute command to be send to robot controller
 		virtual void computeCommand();
 
+		void callback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level);
 		// Dynamic reconfigure callback
-		void dynamicReconfigureCallback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level);
+		virtual void dynamicReconfigureCallback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level);
     
 
     ros::Publisher _pubAttractorPosition;

@@ -25,7 +25,7 @@ add_message_files(
 generate_messages(DEPENDENCIES std_msgs)
 
 # Generate dynamic reconfigure parameters
-generate_dynamic_reconfigure_options(cfg/footMouseController_params.cfg cfg/footMouseInterface_params.cfg)
+generate_dynamic_reconfigure_options(cfg/footMouseSharedControl_params.cfg cfg/footMouseController_params.cfg cfg/footMouseInterface_params.cfg)
 
 catkin_package(
   INCLUDE_DIRS include

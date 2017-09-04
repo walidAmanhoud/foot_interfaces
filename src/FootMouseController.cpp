@@ -506,6 +506,10 @@ Eigen::Vector4f FootMouseController::quaternionProduct(Eigen::Vector4f q1, Eigen
   	return q;
 }
 
+void FootMouseController::callback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level)
+{
+	this->dynamicReconfigureCallback(config,level);
+}
 
 void FootMouseController::dynamicReconfigureCallback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level)
 {
@@ -537,6 +541,7 @@ void FootMouseController::dynamicReconfigureCallback(foot_interfaces::footMouseC
 		ROS_ERROR("RECONFIGURE: The limit for angular velocity cannot be negative!");
 	}
 }
+
 
 void* FootMouseController::startPathPublishingLoop(void* ptr)
 {

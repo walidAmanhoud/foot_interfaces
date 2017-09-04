@@ -2,7 +2,8 @@
 #define __FOOT_MOUSE_SHARED_CONTROL_H__
 
 #include "FootMouseController.h"
-
+#include "std_msgs/Float32.h"
+#include "foot_interfaces/footMouseSharedControl_paramsConfig.h"
 #define NB_TASKS 1
 
 class FootMouseSharedControl: public FootMouseController 
@@ -20,15 +21,19 @@ class FootMouseSharedControl: public FootMouseController
 		Eigen::Vector3f _taskAttractor[NB_TASKS];
 
 		float _alpha = 0.0f;
-		float _d1 = 0.0f;
-		float _d2 = 0.2f;
+
+
+		float _arbitrationLimit;
+		float _agreementWeight;
+		float _attractorWeight;
+		float _d1;
+		float _d2;
 
 		int _taskId;
 		ros::Publisher _pubtaskAttractor[NB_TASKS];
+		ros::Publisher _pubArbitration;
 
 		geometry_msgs::PointStamped _msgTaskAttractor[NB_TASKS];
-
-
 
 	public:
 
@@ -50,7 +55,8 @@ class FootMouseSharedControl: public FootMouseController
 		void publishData();
 
 
-
+// Dynamic reconfigure callback
+		void dynamicReconfigureCallback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level);
 
 };
 

@@ -17,10 +17,11 @@ FootMouseSharedControl::FootMouseSharedControl(ros::NodeHandle &n, double freque
   _taskId = 0;
 
   _taskAttractor[0] << -0.34f, 0.3f, 0.35f;
-  // _taskAttractor[1] << -0.34f, -0.3f, 0.35f;
+  //_taskAttractor[1] << -0.34f, -0.3f, 0.35f;
 
   _pubtaskAttractor[0] = _n.advertise<geometry_msgs::PointStamped>("footMouseSharedControl/taskAttractor1", 1);
-  _pubtaskAttractor[1] = _n.advertise<geometry_msgs::PointStamped>("footMouseSharedControl/taskAttractor2", 1);
+  //_pubtaskAttractor[1] = _n.advertise<geometry_msgs::PointStamped>("footMouseSharedControl/taskAttractor2", 1);
+  _pubArbitration = _n.advertise<std_msgs::Float32>("footMouseSharedControl/arbitration", 1);
 
 }
 
@@ -111,9 +112,11 @@ void FootMouseSharedControl::computeAutonomy()
 {
 
   
-  Eigen::VectorXf d, c;
+  Eigen::VectorXf d, c, ct, ch;
   d.resize(NB_TASKS);
   c.resize(NB_TASKS);
+  ct.resize(NB_TASKS);
+  ch.resize(NB_TASKS);
 
   for(int k =0; k < NB_TASKS; k++)
   {
@@ -121,7 +124,7 @@ void FootMouseSharedControl::computeAutonomy()
     d(k) = (_taskAttractor[k]-_pcur).norm();
     Eigen::Vector3f vu, vt;
 
-    if(_vuser.norm()> 1e-6)
+    if(_vuser.norm()> 1e-6f)
     {
       vu = _vuser/_vuser.norm();
     }
@@ -130,7 +133,7 @@ void FootMouseSharedControl::computeAutonomy()
       vu.setConstant(0.0f);
     }
 
-    if(_vtask[k].norm()> 1e-6)
+    if(_vtask[k].norm()> 1e-6f)
     {
       vt = _vtask[k]/_vtask[k].norm();
     }
@@ -140,11 +143,11 @@ void FootMouseSharedControl::computeAutonomy()
     }
 
 
-    float ch = vt.dot(vu);
-    float ct = std::exp(-(d(k)-_d1)/_d2);
+    ch(k) = _agreementWeight*_vtask[k].dot(_vuser);
+    ct(k) = _attractorWeight*std::exp(-(d(k)-_d1)/_d2);
     
-    c(k) = ch+ct;
-    std::cerr << "c" << k << ": " << c(k) << " ch: " << ch <<" ct: " << ct << std::endl;
+    c(k) = ch(k)+ct(k);
+    std::cerr << "c" << k << ": " << c(k) << " ch: " << ch(k) <<" ct: " << ct(k) << std::endl;
     // _alpha = 
   }
 
@@ -152,11 +155,12 @@ void FootMouseSharedControl::computeAutonomy()
 
   // _alpha = (_vuser/_vuser.norm()).dot(_vtask/_vtask.norm())+std::exp(-(d-_d1)/_d2);
 
-  _alpha = c.maxCoeff(&_taskId);
-  
-  if(_alpha>0.8f)
+  ct.maxCoeff(&_taskId);
+  _alpha = c(_taskId);
+
+  if(_alpha>_arbitrationLimit)
   {
-    _alpha = 0.8f;
+    _alpha = _arbitrationLimit;
   }
   else if(_alpha < 0.0f)
   {
@@ -177,12 +181,12 @@ void FootMouseSharedControl::computeTaskVelocity()
       Eigen::Vector3f x = _pcur-_taskAttractor[k];
       float R = sqrt(x(0) * x(0) + x(1) * x(1));
       float T = atan2(x(1), x(0));
-      float vx = -alpha*(R-r) * cos(T) - R * omega * sin(T);
-      float vy = -alpha*(R-r) * sin(T) + R * omega * cos(T);
-      float vz = -alpha*x(2);
-      // float vx = -alpha*x(0);
-      // float vy = -alpha*x(1);
+      // float vx = -alpha*(R-r) * cos(T) - R * omega * sin(T);
+      // float vy = -alpha*(R-r) * sin(T) + R * omega * cos(T);
       // float vz = -alpha*x(2);
+      float vx = -alpha*x(0);
+      float vy = -alpha*x(1);
+      float vz = -alpha*x(2);
       _vtask[k] << vx, vy, vz;
 
       if (_vtask[k].norm() > 0.15f) 
@@ -204,6 +208,16 @@ void FootMouseSharedControl::processCursorEvent(float relX, float relY, bool new
 	}
 	else
 	{
+
+		if(relX >-5 && relX <5)
+		{
+			relX = 0;
+		}
+
+		if(relY >-5 && relY <5)
+		{
+			relY = 0;
+		}
 		// Update desired x,y position
 		_pdes(1) = _pcur(1);
 		_pdes(2) = _pcur(2);
@@ -298,7 +312,47 @@ void FootMouseSharedControl::publishData()
     
   }
 
+  std_msgs::Float32 msg;
+
+  msg.data = _alpha;
+  _pubArbitration.publish(msg);
+
   _mutex.unlock();
 
 
+}
+
+void FootMouseSharedControl::dynamicReconfigureCallback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level)
+{
+	ROS_INFO("Reconfigure request bou. Updatig the parameters ...");
+
+	_arbitrationLimit = config.arbitrationLimit;
+	_agreementWeight = config.agreementWeight;
+	_attractorWeight = config.attractorWeight;
+	_d1 = config.d1;
+	_d2 = config.d2;
+	_convergenceRate = config.convergenceRate;
+	_zVelocity = config.zVelocity;
+	_linearVelocityLimit = config.linearVelocityLimit;
+	_angularVelocityLimit = config.angularVelocityLimit;
+	_modeThreeTranslation = config.modeThreeTranslation;
+	// if (_arbitrationLimit < 0)
+	// {
+	// 	ROS_ERROR("RECONFIGURE: The convergence rate cannot be negative!");
+	// }
+
+	// if (_zVelocity < 0)
+	// {
+	// 	ROS_ERROR("RECONFIGURE: The z velocity cannot be negative!");
+	// }
+
+	// if (_linearVelocityLimit < 0) 
+	// {
+	// 	ROS_ERROR("RECONFIGURE: The limit for linear velocity cannot be negative!");
+	// }
+
+	// if (_angularVelocityLimit < 0) 
+	// {
+	// 	ROS_ERROR("RECONFIGURE: The limit for angular velocity cannot be negative!");
+	// }
 }
