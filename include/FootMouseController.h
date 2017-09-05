@@ -88,6 +88,7 @@ class FootMouseController
 		// Class variables
 		std::mutex _mutex;
 
+    	int _count;
 		
 	public:
 
@@ -149,7 +150,6 @@ class FootMouseController
     void pathPublishingLoop();
     void publishFuturePath();
     nav_msgs::Path _msgDesiredPath;
-    int _count;
 
 };
 
