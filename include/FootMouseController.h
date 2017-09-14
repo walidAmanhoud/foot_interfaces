@@ -25,7 +25,8 @@
 #include "nav_msgs/Path.h"
 
 // Max cursor value of the foot mouse
-#define MAX_XY_REL 127
+// #define MAX_XY_REL 127
+#define MAX_XY_REL 350
 #define MAX_FRAME 200
 
 
@@ -65,6 +66,7 @@ class FootMouseController
 		// Foot mouse control variables
 		KDL::Rotation _Rcur;					// Current end effector orientation
 		KDL::Rotation _Rdes;					// Desired end effector orientation
+		Eigen::Matrix3f _wRb;				// Current rotation matrix [m] (3x1)
 		Eigen::Vector3f _pcur;				// Current position [m] (3x1)
 		Eigen::Vector3f _pdes;				// Desired position [m] (3x1)
 		Eigen::Vector3f _vdes;				// Desired velocity [m/s] (3x1)
@@ -89,6 +91,10 @@ class FootMouseController
 		std::mutex _mutex;
 
     	int _count;
+
+    	static FootMouseController* me;
+
+    	bool _stop = false;
 		
 	public:
 
@@ -108,6 +114,8 @@ class FootMouseController
 
 		// Compute quaternion product
 		Eigen::Vector4f quaternionProduct(Eigen::Vector4f q1, Eigen::Vector4f q2);
+
+		static void stopNode(int sig);
 	
 	private:
 
@@ -137,6 +145,7 @@ class FootMouseController
 		void callback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level);
 		// Dynamic reconfigure callback
 		virtual void dynamicReconfigureCallback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level);
+
     
 
     ros::Publisher _pubAttractorPosition;

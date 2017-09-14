@@ -214,11 +214,13 @@ void FootMouseInterface::readFootMouse()
         }
 
         _footMouseMessage.buttonState = _ie.value;
+        // std::cerr << (int) _ie.code << " " << (int) _ie.value << std::endl;  
 
         break;
       }
       case EV_REL:
-      {       
+      {     
+        // std::cerr << (int) _ie.code << " " << (int) _ie.value << std::endl;  
         // Get REL event code   
         if(_ie.code == REL_X)
         {

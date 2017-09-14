@@ -1,12 +1,15 @@
 #include "FootMouseController.h"
 // #include <tf/transform_datatypes.h>
+#include <signal.h>
 
+FootMouseController* FootMouseController::me = NULL;
 
 FootMouseController::FootMouseController(ros::NodeHandle &n, double frequency): 
 	_n(n),
 	_loopRate(frequency),
 	_dt(1 / frequency)
 {
+	me = this;
 
 	ROS_INFO_STREAM("Motion generator node is created at: " << _n.getNamespace() << " with freq: " << frequency << "Hz");
 }
@@ -17,6 +20,7 @@ bool FootMouseController::init()
 	// Init state variables
 	_firstRealPoseReceived = false;
 	_firstEventReceived = false;
+	_msgFootMouse.event = foot_interfaces::FootMouseMsg::FM_NONE;
 	_lastEvent = foot_interfaces::FootMouseMsg::FM_NONE;
 	_firstButton = false;
 	_buttonPressed = false;
@@ -72,6 +76,8 @@ bool FootMouseController::initROS()
       throw std::runtime_error("Cannot create reception thread");   
   }
 
+	signal(SIGINT,FootMouseController::stopNode);
+	
 	if (_n.ok()) 
 	{ 
 		// Wait for poses being published
@@ -84,11 +90,13 @@ bool FootMouseController::initROS()
 		ROS_ERROR("The ros node has a problem.");
 		return false;
 	}
+
+
 }
 
 void FootMouseController::run()
 {
-	while (_n.ok()) 
+	while (!_stop) 
 	{
 		if(_firstEventReceived && _firstRealPoseReceived)
 		{
@@ -104,8 +112,23 @@ void FootMouseController::run()
 		_loopRate.sleep();
 	}
 
+	_vdes.setConstant(0.0f);
+	_omegades.setConstant(0.0f);
+	_qdes = _qcur;
+
+	publishData();
+	ros::spinOnce();
+	_loopRate.sleep();
+
 	_start = false;
   pthread_join(_thread,NULL);
+
+  ros::shutdown();
+}
+
+void FootMouseController::stopNode(int sig)
+{
+	me->_stop = true;
 }
 
 void  FootMouseController::computeCommand()
@@ -226,6 +249,10 @@ void FootMouseController::updateRealPose(const geometry_msgs::Pose::ConstPtr& ms
 	_pcur << _msgRealPose.position.x, _msgRealPose.position.y, _msgRealPose.position.z;
 	_qcur << _msgRealPose.orientation.w, _msgRealPose.orientation.x, _msgRealPose.orientation.y, _msgRealPose.orientation.z;
 	_Rcur =  KDL::Rotation::Quaternion(_msgRealPose.orientation.x,_msgRealPose.orientation.y,_msgRealPose.orientation.z,_msgRealPose.orientation.w);
+
+  _wRb << _Rcur.UnitX().x(), _Rcur.UnitY().x(), _Rcur.UnitZ().x(),
+       _Rcur.UnitX().y(), _Rcur.UnitY().y(), _Rcur.UnitZ().y(), 
+       _Rcur.UnitX().z(), _Rcur.UnitY().z(), _Rcur.UnitZ().z();
 
 	if(!_firstRealPoseReceived)
 	{
