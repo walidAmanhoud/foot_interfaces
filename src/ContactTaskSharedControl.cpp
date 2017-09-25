@@ -4,11 +4,11 @@
 
 
 ContactTaskSharedControl::ContactTaskSharedControl(ros::NodeHandle &n, double frequency): FootMouseController(n,frequency),
-	_n(n),
-	_loopRate(frequency),
-	_dt(1 / frequency)
+  _n(n),
+  _loopRate(frequency),
+  _dt(1 / frequency)
 {
-	_vuser.setConstant(0.0f);
+  _vuser.setConstant(0.0f);
   _vtask.setConstant(0.0f);
   _efWrench.setConstant(0.0f);
   _wrench.setConstant(0.0f);
@@ -41,78 +41,81 @@ ContactTaskSharedControl::ContactTaskSharedControl(ros::NodeHandle &n, double fr
   _taskAttractor << -0.54f, 0.0f, 0.25f;
 
   _msgMarker.header.frame_id = "world";
-	_msgMarker.header.stamp = ros::Time();
-	_msgMarker.ns = "marker_test_triangle_list";
-	_msgMarker.id = 0;
-	_msgMarker.type = visualization_msgs::Marker::TRIANGLE_LIST;
-	_msgMarker.action = visualization_msgs::Marker::ADD;
-	_msgMarker.pose.position.x = _taskAttractor(0);
-	_msgMarker.pose.position.y = _taskAttractor(1);
-	_msgMarker.pose.position.z = _taskAttractor(2);
-	_msgMarker.pose.orientation.x = 0.0;
-	_msgMarker.pose.orientation.y = 1.0;
-	_msgMarker.pose.orientation.z = 0.0;
+  _msgMarker.header.stamp = ros::Time();
+  _msgMarker.ns = "marker_test_triangle_list";
+  _msgMarker.id = 0;
+  _msgMarker.type = visualization_msgs::Marker::TRIANGLE_LIST;
+  _msgMarker.action = visualization_msgs::Marker::ADD;
+  _msgMarker.pose.position.x = _taskAttractor(0);
+  _msgMarker.pose.position.y = _taskAttractor(1);
+  _msgMarker.pose.position.z = _taskAttractor(2);
+  _msgMarker.pose.orientation.x = 0.0;
+  _msgMarker.pose.orientation.y = 1.0;
+  _msgMarker.pose.orientation.z = 0.0;
   _msgMarker.pose.orientation.w = 0.0;
   // _msgMarker.pose.orientation.x = 0.0;
   // _msgMarker.pose.orientation.y = 0.9239f;
   // _msgMarker.pose.orientation.z = 0.3827f;
   // _msgMarker.pose.orientation.w = 0.0;
   _Rplane= KDL::Rotation::Quaternion( _msgMarker.pose.orientation.x, _msgMarker.pose.orientation.y, _msgMarker.pose.orientation.z, _msgMarker.pose.orientation.w);
-	_msgMarker.scale.x = 1.0;
-	_msgMarker.scale.y = 1.0;
-	_msgMarker.scale.z = 1.0;
-	_msgMarker.color.a = 1.0;
+  _msgMarker.scale.x = 1.0;
+  _msgMarker.scale.y = 1.0;
+  _msgMarker.scale.z = 1.0;
+  _msgMarker.color.a = 1.0;
 
- 	geometry_msgs::Point p1,p2,p3,p4,p5,p6;
- 	float objectWidth = 0.1f;
- 	float objectLength = 0.1f;
+  geometry_msgs::Point p1,p2,p3,p4,p5,p6;
+  float objectWidth = 0.1f;
+  float objectLength = 0.1f;
 
- 	p1.x = objectWidth/2.0f;
-	p1.y = -objectLength/2.0f;
-	p1.z = 0.0f;
- 	p2.x = -objectWidth/2.0f;
-	p2.y = -objectLength/2.0f;
-	p2.z = 0.0f;
- 	p3.x = -objectWidth/2.0f;
-	p3.y = objectLength/2.0f;
-	p3.z = 0.0f;
- 	p4.x = -objectWidth/2.0f;
-	p4.y = objectLength/2.0f;
-	p4.z = 0.0f;
- 	p5.x = objectWidth/2.0f;
-	p5.y = objectLength/2.0f;
-	p5.z = 0.0f;
- 	p6.x = objectWidth/2.0f;
-	p6.y = -objectLength/2.0f;
-	p6.z = 0.0f;
+  p1.x = objectWidth/2.0f;
+  p1.y = -objectLength/2.0f;
+  p1.z = 0.0f;
+  p2.x = -objectWidth/2.0f;
+  p2.y = -objectLength/2.0f;
+  p2.z = 0.0f;
+  p3.x = -objectWidth/2.0f;
+  p3.y = objectLength/2.0f;
+  p3.z = 0.0f;
+  p4.x = -objectWidth/2.0f;
+  p4.y = objectLength/2.0f;
+  p4.z = 0.0f;
+  p5.x = objectWidth/2.0f;
+  p5.y = objectLength/2.0f;
+  p5.z = 0.0f;
+  p6.x = objectWidth/2.0f;
+  p6.y = -objectLength/2.0f;
+  p6.z = 0.0f;
 
-	std_msgs::ColorRGBA c;
-	c.r = 0.7;
-	c.g = 0.7;
-	c.b = 0.7;
-	c.a = 1.0;
+  std_msgs::ColorRGBA c;
+  c.r = 0.7;
+  c.g = 0.7;
+  c.b = 0.7;
+  c.a = 1.0;
 
   _firstTask = false;
   _firstWrenchReceived = false;
   _wrenchBiasOK = false;
 
-	for(int k = 0; k < 6; k++)
-	{
-		_msgMarker.colors.push_back(c);
-	}
+  _ft = 4.0f;
 
-	_msgMarker.points.push_back(p1);
-	_msgMarker.points.push_back(p2);
-	_msgMarker.points.push_back(p3);
-	_msgMarker.points.push_back(p4);
-	_msgMarker.points.push_back(p5);
-	_msgMarker.points.push_back(p6);
+  for(int k = 0; k < 6; k++)
+  {
+    _msgMarker.colors.push_back(c);
+  }
+
+  _msgMarker.points.push_back(p1);
+  _msgMarker.points.push_back(p2);
+  _msgMarker.points.push_back(p3);
+  _msgMarker.points.push_back(p4);
+  _msgMarker.points.push_back(p5);
+  _msgMarker.points.push_back(p6);
 
   _subEndEffectorWrench = _n.subscribe("lwr/ee_ft",1,&ContactTaskSharedControl::updateEndEffectorWrench, this, ros::TransportHints().reliable().tcpNoDelay());
   _subForceTorqueSensor = _n.subscribe("/ft_sensor/netft_data", 1, &ContactTaskSharedControl::updateMeasuredWrench, this, ros::TransportHints().reliable().tcpNoDelay());
   _subRealTwist = _n.subscribe("/lwr/ee_vel", 1, &ContactTaskSharedControl::updateMeasuredTwist, this, ros::TransportHints().reliable().tcpNoDelay());
   _pubtaskAttractor = _n.advertise<geometry_msgs::PointStamped>("ContactTaskSharedControl/taskAttractor", 1);
   _pubArbitration = _n.advertise<std_msgs::Float32>("ContactTaskSharedControl/arbitration", 1);
+  _pubForceNorm = _n.advertise<std_msgs::Float32>("ContactTaskSharedControl/forceNorm", 1);
   _pubMarker = _n.advertise<visualization_msgs::Marker>("ContactTaskSharedControl/plane", 1);
   _pubFilteredWrench = _n.advertise<geometry_msgs::WrenchStamped>("ContactTaskSharedControl/filteredWrench", 1);
 
@@ -122,82 +125,82 @@ ContactTaskSharedControl::ContactTaskSharedControl(ros::NodeHandle &n, double fr
 void ContactTaskSharedControl::processRightClickEvent(int value, bool newEvent)
 {
 
-	std::cerr << "bou" << std::endl;
+  std::cerr << "bou" << std::endl;
 }
 
 void  ContactTaskSharedControl::computeCommand()
 {
-	uint8_t event;
-	int buttonState, relX, relY, relWheel;
-	float filteredRelX = 0.0f, filteredRelY = 0.0f;
-	bool newEvent = false;
+  uint8_t event;
+  int buttonState, relX, relY, relWheel;
+  float filteredRelX = 0.0f, filteredRelY = 0.0f;
+  bool newEvent = false;
 
-	// If new event received update last event
-	// Otherwhise keep the last one
-	if(_msgFootMouse.event > 0)
-	{
-		_lastEvent = _msgFootMouse.event;
-		buttonState = _msgFootMouse.buttonState;
-		relX = _msgFootMouse.relX;
-		relY = _msgFootMouse.relY;
-		relWheel = _msgFootMouse.relWheel;
-		filteredRelX = _msgFootMouse.filteredRelX;
-		filteredRelY = _msgFootMouse.filteredRelY;
-		newEvent = true;
-	}
-	else
-	{
-		buttonState = 0;
-		relX = 0;
-		relY = 0;
-		relWheel = 0;
-		filteredRelX = 0;
-		filteredRelY = 0;
-		newEvent = false;
-	}
+  // If new event received update last event
+  // Otherwhise keep the last one
+  if(_msgFootMouse.event > 0)
+  {
+    _lastEvent = _msgFootMouse.event;
+    buttonState = _msgFootMouse.buttonState;
+    relX = _msgFootMouse.relX;
+    relY = _msgFootMouse.relY;
+    relWheel = _msgFootMouse.relWheel;
+    filteredRelX = _msgFootMouse.filteredRelX;
+    filteredRelY = _msgFootMouse.filteredRelY;
+    newEvent = true;
+  }
+  else
+  {
+    buttonState = 0;
+    relX = 0;
+    relY = 0;
+    relWheel = 0;
+    filteredRelX = 0;
+    filteredRelY = 0;
+    newEvent = false;
+  }
 
-	event = _lastEvent;
+  event = _lastEvent;
 
-	// Process corresponding event
-	switch(event)
-	{
-		case foot_interfaces::FootMouseMsg::FM_BTN_A:
-		{
-			processABButtonEvent(buttonState,newEvent,-1.0f);
-			break;
+  // Process corresponding event
+  switch(event)
+  {
+    case foot_interfaces::FootMouseMsg::FM_BTN_A:
+    {
+      processABButtonEvent(buttonState,newEvent,-1.0f);
+      break;
 
-		}
-		case foot_interfaces::FootMouseMsg::FM_BTN_B:
-		{
-			processABButtonEvent(buttonState,newEvent,1.0f);
-			break;
-		}
-		case foot_interfaces::FootMouseMsg::FM_RIGHT_CLICK:
-		{
-			// processRightClickEvent(buttonState,newEvent);
-			break;
-		}
+    }
+    case foot_interfaces::FootMouseMsg::FM_BTN_B:
+    {
+      processABButtonEvent(buttonState,newEvent,1.0f);
+      break;
+    }
+    case foot_interfaces::FootMouseMsg::FM_RIGHT_CLICK:
+    {
+      // processRightClickEvent(buttonState,newEvent);
+      break;
+    }
     // case foot_interfaces::FootMouseMsg::FM_RIGHT_CLICK:
     // {
     //   processABButtonEvent(buttonState,newEvent,1.0f);
     //   // processRightClickEvent(buttonState,newEvent);
     //   break;
     // }
-		case foot_interfaces::FootMouseMsg::FM_CURSOR:
-		{
-			processCursorEvent(filteredRelX,filteredRelY,newEvent);
-			break;
-		}
-		default:
-		{
-			break;
-		}
+    case foot_interfaces::FootMouseMsg::FM_CURSOR:
+    {
+      processCursorEvent(filteredRelX,filteredRelY,newEvent);
+      break;
+    }
+    default:
+    {
+      break;
+    }
 
-	}
+  }
 
   computeTaskVelocity();
 
-	// computeAutonomy();
+  // computeAutonomy();
 
   // std::cerr << "alpha:" << _alpha << std::endl;
   // std::cerr << "vuser: " << _vuser.transpose() << std::endl;
@@ -301,14 +304,22 @@ void ContactTaskSharedControl::computeTaskVelocity()
   }
   else
   {
+    _forceNorm = _filteredWrench.segment(0,3).norm();
     primaryTask(false);
     _firstContactEstimation = false;
     _firstSurfaceEstimation = false;
     _cr.setConstant(0.0f);
     _Lr.setConstant(0.0f);
     _Ln.setConstant(0.0f);
-    // _pidInteg =0.0f;
+    // _ft = _contactForceThreshold;
+    if(_pidInteg < 0.0f)
+    {
+      
+      _pidInteg =0.0f;
+    }
     // attractionTask();
+    _firstContact = false;
+    _targetReached = false;
   }
 }
 
@@ -326,11 +337,21 @@ void ContactTaskSharedControl::forceTask()
   Eigen::Vector3f torque = _filteredWrench.segment(3,3);
   Eigen::Vector3f normalDirection = force/force.norm();
 
+  Eigen::Matrix3f orthogonalProjector = Eigen::Matrix3f::Identity()-_wRb.col(2)*_wRb.col(2).transpose();
   Eigen::Vector3f frictionComponent;
   Eigen::Vector3f vb = _vuser(1)*_wRb.col(1);
-  if(vb.norm()>1e-3f)
+  Eigen::Vector3f tangentialForce;
+  Eigen::Vector3f vmes = _twist.segment(0,3);
+
+  // if(_twist.segment(0,3).norm()>1e-3f)
+  // {
+  // std::cerr << vb.norm() << " " << torque.norm() << std::endl;
+    
+  // }
+  if(vb.norm()>1e-3f)// || (force.norm() > _targetForce && _twist.segment(0,3).norm() > 1e-3f))
   {
-    frictionComponent = force.dot(vb/vb.norm())*vb/vb.norm(); 
+    // frictionComponent = force.dot(vb/vb.norm())*vb/vb.norm(); 
+    frictionComponent = orthogonalProjector*force;
   }
   else
   {
@@ -340,7 +361,10 @@ void ContactTaskSharedControl::forceTask()
   force -= frictionComponent;
   normalDirection = force/force.norm();
 
-  std::cerr << "Friction: " << frictionComponent.transpose() << std::endl;
+  // _forceNorm = force.norm();
+
+
+  // std::cerr << "Friction: " << frictionComponent.transpose() << std::endl;
 
   // Eigen::Vector3f normalDirection = _wRb.transpose()*_nc;
   // Eigen::Vector3f zw;
@@ -350,6 +374,9 @@ void ContactTaskSharedControl::forceTask()
   Eigen::Vector3f endEffectorDirection;
   endEffectorDirection << 0.0f,0.0f,-1.0f;
 
+
+  tangentialForce = endEffectorDirection*endEffectorDirection.transpose()*force;
+  _forceNorm = tangentialForce.norm();
   // Compute rotation matrix to align end effector direction with surface normal direction
   // Use rodrigues' rotation formula
   Eigen::Vector3f k;
@@ -395,7 +422,7 @@ void ContactTaskSharedControl::forceTask()
 
   // Compute damping in world frame
   damping = -fabs(std::acos(c))*_twist.segment(3,3);
-  std::cerr << "angle: " << fabs(std::acos(c)) << " omega: "<< _twist.segment(3,3).norm() << std::endl;
+  // std::cerr << "angle: " << fabs(std::acos(c)) << " omega: "<< _twist.segment(3,3).norm() << std::endl;
 
   if(fabs(angle)< M_PI/3.0f)
   {
@@ -437,10 +464,22 @@ void ContactTaskSharedControl::forceTask()
     // if(_usePid && fabs(std::acos(c))<0.3f)
     if(_usePid)
     {
-      _pidError = (_targetForce-force.norm());
+      if(!_firstContact)
+      {
+        _ft = _forceNorm;
+        _firstContact = true;
+      }
+      else
+      {
+        _ft += _dt*(_targetForce-_ft);
+      }
+      // _pidError = (_targetForce-force.norm());
+      _pidError = (_targetForce-_forceNorm);
       _pidInteg += _dt*_pidError;
       _up = _kp*_pidError;
       _ui = _ki*_pidInteg;
+      _ud = _kd*(_pidError-_pidLastError)/_dt;
+      _pidLastError = _pidError;
 
       if(_ui < -_pidLimit)
       {
@@ -451,7 +490,7 @@ void ContactTaskSharedControl::forceTask()
         _ui = _pidLimit;
       }
 
-      float command = _up+_ui;
+      float command = _up+_ui+_ud;
       if(command<-_pidLimit)
       {
         command = -_pidLimit;
@@ -460,7 +499,7 @@ void ContactTaskSharedControl::forceTask()
       {
         command = _pidLimit;
       }
-      std::cerr << "up " << _up << " ui " << _ui << " error " << _pidError << std::endl;
+      std::cerr << "up " << _up << " ui " << _ui << " ud " << _ud <<  " error " << _pidError << std::endl;
 
       // Eigen::Vector3f vf = -command*_wRb*normalDirection;
       Eigen::Vector3f vf = command*_wRb.col(2);
@@ -469,12 +508,16 @@ void ContactTaskSharedControl::forceTask()
       float d, c, ct, ch;
 
 
+      if(fabs(_pidError)<0.5)
+      {
+        _targetReached = true;
+      }
       // d = fabs(_pidError);
       // ct = _attractorWeight*std::exp(-d);
 
 
       ch = _agreementWeight*(vf).dot(vu);
-      d = force.norm();
+      d = _forceNorm;
       if(d <0.0f)
       {
         ct = 0.0f;
@@ -524,6 +567,7 @@ void ContactTaskSharedControl::forceTask()
     else
     {
       _pidInteg = 0.0f;
+      _firstContact = false;
     }
   }
     
@@ -741,62 +785,62 @@ void ContactTaskSharedControl::primaryTask(bool contact)
 
 void ContactTaskSharedControl::processCursorEvent(float relX, float relY, bool newEvent)
 {
-	if(!newEvent) // No new event received
-	{
-		// Track desired position
-		// _vuser = -_convergenceRate*(_pcur-_pdes);
+  if(!newEvent) // No new event received
+  {
+    // Track desired position
+    // _vuser = -_convergenceRate*(_pcur-_pdes);
     _vuser.setConstant(0.0f);
-	}
-	else
-	{
+  }
+  else
+  {
 
-		if(relX >-5 && relX <5)
-		{
-			relX = 0;
-		}
+    if(relX >-5 && relX <5)
+    {
+      relX = 0;
+    }
 
-		if(relY >-5 && relY <5)
-		{
-			relY = 0;
-		}
-		// Update desired x,y position
-		_pdes(0) = _pcur(0);
+    if(relY >-5 && relY <5)
+    {
+      relY = 0;
+    }
+    // Update desired x,y position
+    _pdes(0) = _pcur(0);
     _pdes(1) = _pcur(1);
 
-		// Compute desired x, y velocities along x, y axis of world frame
-		if(relX>MAX_XY_REL)
-		{
-			_vuser(1) = -_linearVelocityLimit;
-		}
-		else if(relX < -MAX_XY_REL)
-		{
-			_vuser(1) = _linearVelocityLimit;
-		}
-		else
-		{
-			_vuser(1) = -_linearVelocityLimit*relX/MAX_XY_REL;
-		}
+    // Compute desired x, y velocities along x, y axis of world frame
+    if(relX>MAX_XY_REL)
+    {
+      _vuser(1) = -_linearVelocityLimit;
+    }
+    else if(relX < -MAX_XY_REL)
+    {
+      _vuser(1) = _linearVelocityLimit;
+    }
+    else
+    {
+      _vuser(1) = -_linearVelocityLimit*relX/MAX_XY_REL;
+    }
 
-		if(relY>MAX_XY_REL)
-		{
-			_vuser(0) = -_linearVelocityLimit;
-		}
-		else if(relY < -MAX_XY_REL)
-		{
-			_vuser(0) = _linearVelocityLimit;
-		}
-		else
-		{
-			_vuser(0) = -_linearVelocityLimit*relY/MAX_XY_REL;
-		}
+    if(relY>MAX_XY_REL)
+    {
+      _vuser(0) = -_linearVelocityLimit;
+    }
+    else if(relY < -MAX_XY_REL)
+    {
+      _vuser(0) = _linearVelocityLimit;
+    }
+    else
+    {
+      _vuser(0) = -_linearVelocityLimit*relY/MAX_XY_REL;
+    }
 
-		if(!_firstButton || !_buttonPressed)
-		{
-			// If buttons not pressed track desired z position
-			// _vuser(0) = -_convergenceRate*(_pcur(0)-_pdes(0));
+    if(!_firstButton || !_buttonPressed)
+    {
+      // If buttons not pressed track desired z position
+      // _vuser(0) = -_convergenceRate*(_pcur(0)-_pdes(0));
       _vuser(2) = 0.0f;
-		}
-	}	
+    }
+  } 
 }
 
 
@@ -887,6 +931,9 @@ void ContactTaskSharedControl::publishData()
   msg.data = _alpha;
   _pubArbitration.publish(msg);
 
+  msg.data = _forceNorm;
+  _pubForceNorm.publish(msg);
+
   _msgFilteredWrench.header.frame_id = "world";
   _msgFilteredWrench.header.stamp = ros::Time::now();
   _msgFilteredWrench.wrench.force.x = _filteredWrench(0);
@@ -904,13 +951,13 @@ void ContactTaskSharedControl::publishData()
 
 void ContactTaskSharedControl::dynamicReconfigureCallback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level)
 {
-	ROS_INFO("Reconfigure request bou. Updatig the parameters ...");
+  ROS_INFO("Reconfigure request bou. Updatig the parameters ...");
 
-	_arbitrationLimit = config.arbitrationLimit;
-	_agreementWeight = config.agreementWeight;
-	_attractorWeight = config.attractorWeight;
-	_d1 = config.d1;
-	_d2 = config.d2;
+  _arbitrationLimit = config.arbitrationLimit;
+  _agreementWeight = config.agreementWeight;
+  _attractorWeight = config.attractorWeight;
+  _d1 = config.d1;
+  _d2 = config.d2;
   _linearSpeedGain = config.linearSpeedGain;
   _angularSpeedGain = config.angularSpeedGain;
   _filteredGain = config.filteredGain;
@@ -920,6 +967,7 @@ void ContactTaskSharedControl::dynamicReconfigureCallback(foot_interfaces::footM
   _pidLimit = config.pidLimit;
   _kp = config.kp;
   _ki = config.ki;
+  _kd = config.kd;
 
   _convergenceRate = config.convergenceRate;
   _zVelocity = config.zVelocity;

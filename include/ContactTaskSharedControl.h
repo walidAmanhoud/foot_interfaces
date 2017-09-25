@@ -29,6 +29,7 @@ class ContactTaskSharedControl: public FootMouseController
 		Eigen::Matrix<float,6,1> _wrenchBias;
 		Eigen::Matrix<float,6,1> _filteredWrench;
 		Eigen::Matrix<float,6,1> _twist;
+		float _forceNorm;
 
 		float _alpha = 0.0f;
 		float _distance = 0.0f;
@@ -46,6 +47,7 @@ class ContactTaskSharedControl: public FootMouseController
 		ros::Publisher _pubMarker;
 		ros::Publisher _pubtaskAttractor;
 		ros::Publisher _pubArbitration;
+		ros::Publisher _pubForceNorm;
 		ros::Publisher _pubFilteredWrench;
 		
 		visualization_msgs::Marker _msgMarker;
@@ -88,13 +90,19 @@ class ContactTaskSharedControl: public FootMouseController
 		// Pid force control
 		float _kp;
 		float _ki;
+		float _kd;
 		float _pidInteg = 0.0f;
 		float _pidError = 0.0f;
+		float _pidLastError = 0.0f;
 		float _pidLimit;
 		float _up;
 		float _ui;
+		float _ud;
 		float _targetForce;
+		float _ft;
 		bool _usePid;
+		bool _firstContact = false;
+		bool _targetReached = false;
 
 		// static ContactTaskSharedControl* me;
 

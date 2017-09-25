@@ -35,6 +35,7 @@ class FootMouseInterface
 
 		float _filteredRelX;			// Filtered relative x motion
 		float _filteredRelY;			// Filtered relative y motion
+		float _filteredRelZ;			// Filtered relative z motion
 
 		// Moving average filter variables for cursor data
 		std::deque<int> _winX; 		// Window for relative x motion

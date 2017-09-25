@@ -12,6 +12,8 @@ uint8 event
 int32 buttonState
 int32 relX
 int32 relY
+int32 relZ
 int32 relWheel
 float32 filteredRelX
 float32 filteredRelY
+float32 filteredRelZ

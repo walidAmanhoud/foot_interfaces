@@ -38,12 +38,15 @@ bool FootMouseInterface::init(std::string eventPath)
   _footMouseMessage.buttonState = 0;
   _footMouseMessage.relX = 0;
   _footMouseMessage.relY = 0;
+  _footMouseMessage.relZ = 0;
   _footMouseMessage.filteredRelX = 0.0f;
   _footMouseMessage.filteredRelY = 0.0f;
+  _footMouseMessage.filteredRelZ = 0.0f;
 
   // Initialize filtered x,y relative motion 
   _filteredRelX = 0.0f;
   _filteredRelY = 0.0f;
+  _filteredRelZ = 0.0f;
 
   // Dynamic reconfigure definition
   _dynRecCallback = boost::bind(&FootMouseInterface::dynamicReconfigureCallback, this, _1, _2);
@@ -156,17 +159,21 @@ void FootMouseInterface::publishData()
         temp/= _winY.size();
         _filteredRelY = temp;
       }
+
+      _filteredRelZ = 0.0f;
     }
     else // Use simple 1D low pass filter
     {
       _filteredRelX = _alpha*_filteredRelX+(1.0f-_alpha)*_footMouseMessage.relX;
       _filteredRelY = _alpha*_filteredRelY+(1.0f-_alpha)*_footMouseMessage.relY;
+      _filteredRelZ = _alpha*_filteredRelZ+(1.0f-_alpha)*_footMouseMessage.relZ;
     }
 
     _footMouseMessage.filteredRelX = _filteredRelX;
     _footMouseMessage.filteredRelY = _filteredRelY;
+    _footMouseMessage.filteredRelZ = _filteredRelZ;
 
-    std::cerr << "cursor: " << _footMouseMessage.relX << " " << _footMouseMessage.relY << std::endl;
+    std::cerr << "cursor: " << _footMouseMessage.relX << " " << _footMouseMessage.relY << " " << _footMouseMessage.relZ << std::endl;
 
     // Publish foot mouse message
     _pubFootMouseData.publish(_footMouseMessage);
@@ -242,14 +249,25 @@ void FootMouseInterface::readFootMouse()
           if(!_relReceived)
           {
             _footMouseMessage.relX = 0;
+            _relReceived = true;
+          }
+        }
+        else if(_ie.code == REL_Z)
+        {
+          _footMouseMessage.event = foot_interfaces::FootMouseMsg::FM_CURSOR;
+          _footMouseMessage.relZ = _ie.value;
+          if(!_relReceived)
+          {
+            _footMouseMessage.relX = 0;
+            _footMouseMessage.relY = 0;
+            _relReceived = true;
           }
         }
         else if(_ie.code == REL_WHEEL)
         {
           _footMouseMessage.event = foot_interfaces::FootMouseMsg::FM_WHEEL;
+          _footMouseMessage.relWheel = _ie.value;
         }
-
-        _footMouseMessage.relWheel = _ie.value;
 
         break;
       }
@@ -271,6 +289,7 @@ void FootMouseInterface::readFootMouse()
     _footMouseMessage.event = foot_interfaces::FootMouseMsg::FM_NONE;
   }
 
+  // std::cerr << (int) _ie.type << " " << (int) _ie.code << " " << (int) _ie.value << std::endl;
 }
 
 
