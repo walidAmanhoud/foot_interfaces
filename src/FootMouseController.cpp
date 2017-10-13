@@ -336,6 +336,11 @@ void FootMouseController::processABButtonEvent(int value, bool newEvent, int dir
 
 			if(value>0)
 			{
+				_count++;
+				if(_count>MAX_XY_REL)
+				{
+					_count = MAX_XY_REL;
+				}
 				// Update desired velocity and position
 				_buttonPressed = true;
 				_vdes = direction*_zVelocity*zAxis;
@@ -343,6 +348,7 @@ void FootMouseController::processABButtonEvent(int value, bool newEvent, int dir
 			}
 			else
 			{
+				_count = 0;
 				// Track desired position
 				_buttonPressed = false;
 				_vdes= -_convergenceRate*(_pcur-_pdes);

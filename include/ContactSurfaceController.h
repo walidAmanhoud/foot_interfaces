@@ -20,7 +20,7 @@
 
 #include "FootMouseInterface.h"
 #include "foot_interfaces/FootMouseMsg.h"
-#include "foot_interfaces/footMouseController_paramsConfig.h"
+#include "foot_interfaces/contactSurfaceController_paramsConfig.h"
 
 #include "geometry_msgs/PointStamped.h"
 #include "nav_msgs/Path.h"
@@ -28,10 +28,11 @@
 #include "std_msgs/Float32.h"
 #include "visualization_msgs/Marker.h"
 #include "geometry_msgs/WrenchStamped.h"
+#include "geometry_msgs/Wrench.h"
 #include "geometry_msgs/Twist.h"
 
 #define NB_SAMPLES 50
-#define MAX_XY_REL 350
+#define MAX_XY_REL 80
 #define MAX_FRAME 200
 
 class ContactSurfaceController 
@@ -48,6 +49,7 @@ class ContactSurfaceController
 		Eigen::Vector3f _vtask;
 		Eigen::Vector3f _taskAttractor;
 		Eigen::Vector3f _direction;
+		Eigen::Vector3f _contactForce;
 		Eigen::Matrix<float,6,1> _efWrench;
 		Eigen::Matrix<float,6,1> _wrench;
 		Eigen::Matrix<float,6,1> _wrenchBias;
@@ -77,8 +79,13 @@ class ContactSurfaceController
 		ros::Publisher _pubFilteredWrench;
 		ros::Publisher _pubDesiredPose;         // Publish desired pose
 		ros::Publisher _pubDesiredTwist;				// Publish desired twist
+		ros::Publisher _pubDesiredWrench;				// Publish desired twist
 		ros::Publisher _pubDesiredOrientation;  // Publish desired orientation
 
+		ros::Subscriber _subOptitrackRobotBasisPose;
+		ros::Subscriber _subOptitrackPlane1Pose;
+		ros::Subscriber _subOptitrackPlane2Pose;
+		ros::Subscriber _subOptitrackPlane3Pose;
 
 		// Subsciber and publisher messages declaration
 		foot_interfaces::FootMouseMsg _msgFootMouse;
@@ -86,6 +93,7 @@ class ContactSurfaceController
 		geometry_msgs::Pose _msgDesiredPose;
 		geometry_msgs::Quaternion _msgDesiredOrientation;
 		geometry_msgs::Twist _msgDesiredTwist;
+		geometry_msgs::Wrench _msgDesiredWrench;
 		
 		visualization_msgs::Marker _msgMarker;
 		geometry_msgs::PointStamped _msgTaskAttractor;
@@ -99,12 +107,14 @@ class ContactSurfaceController
 
 		float _linearSpeedGain;
 		float _angularSpeedGain;
-		float _filteredGain;
+		float _filteredForceGain;
 		int _wrenchCount = 0;
 
 		float _loadMass = 0.132f;
 		Eigen::Vector3f _loadOffset;
 		Eigen::Vector3f _gravity;
+		float _toolOffset = 0.114f;
+		// float _toolOffset = 0.0f;
 
 		float _contactForceThreshold;
 
@@ -141,6 +151,8 @@ class ContactSurfaceController
 
         // Foot mouse controller configuration variables
     float _convergenceRate;       // Convergence rate of the DS
+    float _xOffset;
+    float _yOffset;
     float _zVelocity;             // Velocity along Z axis [m/s]
     float _linearVelocityLimit;   // Linear velocity limit [m/s]
     float _angularVelocityLimit;  // Angular velocity limit [rad/s]
@@ -164,8 +176,42 @@ class ContactSurfaceController
 		Eigen::Vector3f _dir;
     float _angle;
 
+    Eigen::Vector3f _desiredDir;
+    bool _firstClose;
 
-		static ContactSurfaceController* me;
+    Eigen::Vector3f _xp;
+    float _fc;
+    float _A;
+    float _B;
+    float _C;
+    float _D;
+    float _E;
+    bool _polishing;
+
+    float _fdis;
+
+	Eigen::Vector3f _robotBasisPosition;
+	Eigen::Vector3f _plane1Position;
+	Eigen::Vector3f _plane2Position;
+	Eigen::Vector3f _plane3Position;
+	bool _firstRobotBasisPose;
+	bool _firstPlane1Pose;
+	bool _firstPlane2Pose;
+	bool _firstPlane3Pose;
+
+	Eigen::Vector3f _p1;
+	Eigen::Vector3f _p2;
+	Eigen::Vector3f _p3;
+
+	float _xf;
+
+
+	static ContactSurfaceController* me;
+
+			// Dynamic reconfigure (server+callback)
+	dynamic_reconfigure::Server<foot_interfaces::contactSurfaceController_paramsConfig> _dynRecServer;
+	dynamic_reconfigure::Server<foot_interfaces::contactSurfaceController_paramsConfig>::CallbackType _dynRecCallback;
+
 
 	public:
 
@@ -198,7 +244,7 @@ class ContactSurfaceController
 
     void updateMeasuredTwist(const geometry_msgs::Twist::ConstPtr& msg);
 
-    // void dynamicReconfigureCallback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level);
+    void dynamicReconfigureCallback(foot_interfaces::contactSurfaceController_paramsConfig &config, uint32_t level);
 
     Eigen::Vector4f quaternionProduct(Eigen::Vector4f q1, Eigen::Vector4f q2);
 
@@ -208,9 +254,19 @@ class ContactSurfaceController
 
   	Eigen::Matrix3f quaternionToRotationMatrix(Eigen::Vector4f q);
 
-		void quaternionToAxisAngle(Eigen::Vector4f q, Eigen::Vector3f &axis, float &angle);
+	void quaternionToAxisAngle(Eigen::Vector4f q, Eigen::Vector3f &axis, float &angle);
 
+  	Eigen::Vector4f slerpQuaternion(Eigen::Vector4f q1, Eigen::Vector4f q2, float t);
 
+	void updateRobotBasisPose(const geometry_msgs::PoseStamped::ConstPtr& msg);
+
+	void updatePlane1Pose(const geometry_msgs::PoseStamped::ConstPtr& msg);
+
+	void updatePlane2Pose(const geometry_msgs::PoseStamped::ConstPtr& msg);
+
+	void updatePlane3Pose(const geometry_msgs::PoseStamped::ConstPtr& msg);
+
+	Eigen::Vector3f getDesiredVelocity(Eigen::Vector3f position, Eigen::Vector3f attractor);
 
 
 

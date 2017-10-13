@@ -202,6 +202,7 @@ void FootMouseInterface::readFootMouse()
     {
       case EV_KEY:
       {
+        // std::cerr << (int) _ie.type << std::endl;
         // Get KEY event code
         if(_ie.code == BTN_RIGHT)
         {

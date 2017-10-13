@@ -26,10 +26,11 @@ ContactSurfaceController::ContactSurfaceController(ros::NodeHandle &n, double fr
   _qcur.setConstant(0.0f);
   _qdes.setConstant(0.0f);
   _attractorPosition.setConstant(0.0f);
-  _taskAttractor << -0.34f, 0.0f, 0.2f;
+  _taskAttractor << -0.5f, -0.4f, 0.186f;
+  _taskAttractor << -0.74f, -0.170f, 0.186f;
   _planeNormal << 0.0f, 0.0f, 1.0f;
   _planeTangent << 0.0f, -1.0f, 0.0f;
-  _p <<0.0f,0.0f,0.2f;
+  _p <<0.0f,0.0f,0.186f;
 
   _stop = false;
 
@@ -39,42 +40,44 @@ ContactSurfaceController::ContactSurfaceController(ros::NodeHandle &n, double fr
   _msgMarker.id = 0;
   _msgMarker.type = visualization_msgs::Marker::TRIANGLE_LIST;
   _msgMarker.action = visualization_msgs::Marker::ADD;
-  _msgMarker.pose.position.x = _taskAttractor(0);
-  _msgMarker.pose.position.y = _taskAttractor(1);
-  _msgMarker.pose.position.z = _taskAttractor(2);
+  _msgMarker.pose.position.x = _p(0);
+  _msgMarker.pose.position.y = _p(1);
+  _msgMarker.pose.position.z = _p(2);
   Eigen::Matrix3f A = Eigen::Matrix3f::Identity();
   Eigen::Matrix3f R;
-  float angle = -M_PI/6.0f;
+  // float angle = -M_PI/6.0f;
+  // angle = 0.0f;
 
-  R(0,0) = 1.0f;
-  R(1,0) = 0.0f;
-  R(2,0) = 0.0f;
-  R(0,1) = 0.0f;
-  R(1,1) = cos(angle);
-  R(2,1) = sin(angle);
-  R(0,2) = 0.0f;
-  R(1,2) = -sin(angle);
-  R(2,2) = cos(angle);
-  A = A*R;
+  // R(0,0) = 1.0f;
+  // R(1,0) = 0.0f;
+  // R(2,0) = 0.0f;
+  // R(0,1) = 0.0f;
+  // R(1,1) = cos(angle);
+  // R(2,1) = sin(angle);
+  // R(0,2) = 0.0f;
+  // R(1,2) = -sin(angle);
+  // R(2,2) = cos(angle);
+  // A = A*R;
 
-  _planeNormal = R.col(2);
-  _planeTangent = -R.col(1);
+  // _planeNormal = R.col(2);
+  // _desiredDir << 0.0f,-1.0f,0.0f;
+  // _planeTangent = -R.col(1);
 
-  KDL::Rotation Rkdl(A(0,0),A(0,1),A(0,2),
-                     A(1,0),A(1,1),A(1,2),
-                     A(2,0),A(2,1),A(2,2)); 
-  double x,y,z,w;
-  Rkdl.GetQuaternion(x,y,z,w); 
+  // KDL::Rotation Rkdl(A(0,0),A(0,1),A(0,2),
+  //                    A(1,0),A(1,1),A(1,2),
+  //                    A(2,0),A(2,1),A(2,2)); 
+  // double x,y,z,w;
+  // Rkdl.GetQuaternion(x,y,z,w); 
 
-  // _msgMarker.pose.orientation.x = 0.0;
-  // _msgMarker.pose.orientation.y = 1.0;
-  // _msgMarker.pose.orientation.z = 0.0;
-  // _msgMarker.pose.orientation.w = 0.0;
+  _msgMarker.pose.orientation.x = 0.0;
+  _msgMarker.pose.orientation.y = 1.0;
+  _msgMarker.pose.orientation.z = 0.0;
+  _msgMarker.pose.orientation.w = 0.0;
 
-  _msgMarker.pose.orientation.x = x;
-  _msgMarker.pose.orientation.y = y;
-  _msgMarker.pose.orientation.z = z;
-  _msgMarker.pose.orientation.w = w;
+  // _msgMarker.pose.orientation.x = x;
+  // _msgMarker.pose.orientation.y = y;
+  // _msgMarker.pose.orientation.z = z;
+  // _msgMarker.pose.orientation.w = w;
 
 
   _msgMarker.scale.x = 1.0;
@@ -83,8 +86,10 @@ ContactSurfaceController::ContactSurfaceController(ros::NodeHandle &n, double fr
   _msgMarker.color.a = 1.0;
 
   geometry_msgs::Point p1,p2,p3,p4,p5,p6;
-  float objectWidth = 1.0f;
-  float objectLength = 1.0f;
+  // float objectWidth = 1.0f;
+  // float objectLength = 1.0f;
+  float objectWidth = 0.59f;
+  float objectLength = 0.82f;
   p1.x = objectWidth/2.0f;
   p1.y = -objectLength/2.0f;
   p1.z = 0.0f;
@@ -123,6 +128,16 @@ ContactSurfaceController::ContactSurfaceController(ros::NodeHandle &n, double fr
   _msgMarker.points.push_back(p5);
   _msgMarker.points.push_back(p6);
 
+  _wrenchBiasOK = false;
+  _wrenchCount = 0;
+  _gravity << 0.0f, 0.0f, -9.80665f;
+  _loadOffset << 0.0f,0.0f,0.046f;
+  _wrenchBias.setConstant(0.0f);
+  _filteredWrench.setConstant(0.0f);
+  _contactForce.setConstant(0.0f);
+  _fc = 0.0f;
+  _fdis = 0.0f;
+  _xf = 0.0f;
 }
 
 
@@ -134,9 +149,14 @@ bool ContactSurfaceController::init()
   _subRealTwist = _n.subscribe("/lwr/ee_vel", 1, &ContactSurfaceController::updateMeasuredTwist, this, ros::TransportHints().reliable().tcpNoDelay());
   _subForceTorqueSensor = _n.subscribe("/ft_sensor/netft_data", 1, &ContactSurfaceController::updateMeasuredWrench, this, ros::TransportHints().reliable().tcpNoDelay());
 
+  _subOptitrackRobotBasisPose = _n.subscribe("/optitrack/robot/pose", 1, &ContactSurfaceController::updateRobotBasisPose,this,ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPlane1Pose = _n.subscribe("/optitrack/plane1/pose", 1, &ContactSurfaceController::updatePlane1Pose,this,ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPlane2Pose = _n.subscribe("/optitrack/plane2/pose", 1, &ContactSurfaceController::updatePlane2Pose,this,ros::TransportHints().reliable().tcpNoDelay());
+  _subOptitrackPlane3Pose = _n.subscribe("/optitrack/plane3/pose", 1, &ContactSurfaceController::updatePlane3Pose,this,ros::TransportHints().reliable().tcpNoDelay());
 
   // Publisher definitions
   _pubDesiredTwist = _n.advertise<geometry_msgs::Twist>("/lwr/joint_controllers/passive_ds_command_vel", 1);
+  _pubDesiredWrench = _n.advertise<geometry_msgs::Wrench>("/lwr/joint_controllers/passive_ds_command_force", 1);
   _pubDesiredOrientation = _n.advertise<geometry_msgs::Quaternion>("/lwr/joint_controllers/passive_ds_command_orient", 1);
   _pubDesiredPose = _n.advertise<geometry_msgs::Pose>("fm", 1); 
   _pubTaskAttractor = _n.advertise<geometry_msgs::PointStamped>("ContactSurfaceController/taskAttractor", 1);
@@ -146,8 +166,8 @@ bool ContactSurfaceController::init()
   _pubFilteredWrench = _n.advertise<geometry_msgs::WrenchStamped>("ContactSurfaceController/filteredWrench", 1);
 
   // Dynamic reconfigure definition
-  // _dynRecCallback = boost::bind(&ContactSurfaceController::dynamicReconfigureCallback, this, _1, _2);
-  // _dynRecServer.setCallback(_dynRecCallback);
+  _dynRecCallback = boost::bind(&ContactSurfaceController::dynamicReconfigureCallback, this, _1, _2);
+  _dynRecServer.setCallback(_dynRecCallback);
 
   signal(SIGINT,ContactSurfaceController::stopNode);
 
@@ -170,7 +190,10 @@ void ContactSurfaceController::run()
 {
   while (!_stop) 
   {
-    if(_firstRealPoseReceived)
+    // if(_firstRealPoseReceived && _wrenchBiasOK)
+    if(_firstRealPoseReceived && _wrenchBiasOK &&
+       _firstRobotBasisPose && _firstPlane1Pose &&
+       _firstPlane2Pose && _firstPlane3Pose)
     {
       // Compute control command
       computeCommand();
@@ -187,6 +210,7 @@ void ContactSurfaceController::run()
   _vdes.setConstant(0.0f);
   _omegades.setConstant(0.0f);
   _qdes = _qcur;
+  _contactForce.setConstant(0.0f);
 
   publishData();
   ros::spinOnce();
@@ -204,6 +228,8 @@ void ContactSurfaceController::stopNode(int sig)
 
 void  ContactSurfaceController::computeCommand()
 {
+    Eigen::Vector3f torque = _filteredWrench.segment(3,3);
+
   // uint8_t event;
   // int buttonState, relX, relY, relWheel;
   // float filteredRelX = 0.0f, filteredRelY = 0.0f;
@@ -264,49 +290,274 @@ void  ContactSurfaceController::computeCommand()
   //     break;
   //   }
   // }
+  _p1 = _plane1Position-_robotBasisPosition;
+  _p2 = _plane2Position-_robotBasisPosition;
+  _p3 = _plane3Position-_robotBasisPosition;
+  Eigen::Vector3f u,v,n;
+  u = _p3-_p1;
+  v = _p2-_p1;
+  u /= u.norm();
+  v /= v.norm();
+  n = u.cross(v);
+  _planeNormal = n;
+  std::cerr << "plane normal: " << n.transpose() << std::endl;
 
-  float delta = 0.01f;
+  Eigen::Vector3f vcur = _twist.segment(0,3);
+  Eigen::Vector3f fn = (_planeNormal*_planeNormal.transpose())*_filteredWrench.segment(0,3);
+  _forceNorm = fn.norm();
+  Eigen::Vector3f vn = (_planeNormal*_planeNormal.transpose())*vcur;
 
-  _dir = -(_pcur-_taskAttractor);
-  _dir /= _dir.norm();
-  float normalDistance = (_planeNormal*_planeNormal.transpose()*(_pcur-_taskAttractor)).norm();
+  float delta = 0.005f;
 
-  Eigen::Vector3f u = _dir.cross(_planeTangent);
-  float c = _dir.dot(_planeTangent);
-  float s = u.norm();
-  u/=s;
+  _dir << 0.0f,0.0f,-1.0f;
+  // float so = -(_planeNormal.dot(_pcur-_p1))/(_planeNormal.dot(_dir));
+  // _xp = _pcur+so*_dir;
+  _xp = _pcur;
+  _xp(2) = (-_planeNormal(0)*(_xp(0)-_p3(0))-_planeNormal(1)*(_xp(1)-_p3(1))+_planeNormal(2)*_p3(2))/_planeNormal(2);
+  // _xp(2) = (-_planeNormal(0)*(_xp(0)-_p(0))-_planeNormal(1)*(_xp(1)-_p(1))+_planeNormal(2)*_p(2))/_planeNormal(2);
 
-  float theta = std::atan2(delta,normalDistance)*std::acos(c)/(M_PI/2.0f);
 
-  Eigen::Matrix3f K = getSkewSymmetricMatrix(u);
-  Eigen::Matrix3f R = Eigen::Matrix3f::Identity()+std::sin(theta)*K+(1.0f-cos(theta))*K*K;
+  float normalDistance = (_planeNormal*_planeNormal.transpose()*(_pcur-_xp)).norm();
 
+
+  Eigen::Vector3f temp;
+  temp << 1.0f,0.0f,0.0f;
   Eigen::Matrix3f D;
   D.col(0) = -_planeNormal;
-  D.col(1) = _planeTangent;
+  D.col(1) = (Eigen::Matrix3f::Identity()-_planeNormal*_planeNormal.transpose())*temp;
+  D.col(1) = D.col(1)/(D.col(1).norm());
   D.col(2) = (D.col(0)).cross(D.col(1));
+
+
   Eigen::Matrix3f L = Eigen::Matrix3f::Zero();
-  L(0,0) = 2.0f*normalDistance;
-  L(1,1) = 0.25f;
-  L(2,2) = 0.25f;
+  // L(0,0) = _convergenceRate*(1-std::tanh(delta/normalDistance));
+  L(0,0) = _convergenceRate;
+  // L(1,1) = _convergenceRate*std::tanh(delta/normalDistance);
+  // L(2,2) = _convergenceRate*std::tanh(delta/normalDistance);
+  L(1,1) = _convergenceRate*(1-std::tanh(50*normalDistance));
+  L(2,2) = _convergenceRate*(1-std::tanh(50*normalDistance));
+  // L(1,1) = _convergenceRate*(1-std::tanh(50*vn.norm()));
+  // L(2,2) = _convergenceRate*(1-std::tanh(50*vn.norm()));
+  // L(1,1) = _convergenceRate*(1-std::tanh(50*normalDistance))*(1-std::tanh(0.1*fabs(_targetForce-_forceNorm)));
+  // L(2,2) = _convergenceRate*(1-std::tanh(50*normalDistance))*(1-std::tanh(0.1*fabs(_targetForce-_forceNorm)));
 
-  _vdes = (D*L*D.transpose())*(R*_dir);
+  // L(0,0) = _convergenceRate;
+  // L(1,1) = _convergenceRate*std::tanh(delta/_vcur.norm());
+  // L(2,2) = _convergenceRate*std::tanh(delta/_vcur.norm());
 
-  if(_vdes.norm()>0.2f)
+  Eigen::Vector3f xa;
+  xa = _taskAttractor;
+  xa = _p1+0.8*(_p2-_p1)+0.5*(_p3-_p1);
+
+
+
+  // xa(0) += _xOffset;
+  // xa(1) += _yOffset;
+  xa(2) = (-_planeNormal(0)*(xa(0)-_p1(0))-_planeNormal(1)*(xa(1)-_p1(1))+_planeNormal(2)*_p1(2))/_planeNormal(2);
+  // xa(2) = (-_planeNormal(0)*(xa(0)-_p(0))-_planeNormal(1)*(xa(1)-_p(1))+_planeNormal(2)*_p(2))/_planeNormal(2);
+
+  std::cerr << "xa: " << xa.transpose() << std::endl;
+
+
+  float command = 0.0f;
+  if(_usePid)
   {
-    _vdes *= 0.2f/_vdes.norm();
+
+    // _pidError = (_targetForce-force.norm());
+    // _forceNorm = _filteredWrench.segment(0,3).norm();
+    _forceNorm = std::fabs(_filteredWrench(2));
+    _pidError = (_targetForce-_forceNorm);
+    // _pidInteg += _dt*_pidError*std::tanh(delta/normalDistance);
+    _pidInteg += _dt*_pidError*std::tanh(0.00001f/vcur.norm());
+    _up = _kp*_pidError;
+    _ui = _ki*_pidInteg;
+    _ud = _kd*(_pidError-_pidLastError)/_dt;
+    _pidLastError = _pidError;
+
+    if(_ui < -_pidLimit)
+    {
+      _ui = -_pidLimit;
+    }
+    else if(_ui > _pidLimit)
+    {
+      _ui = _pidLimit;
+    }
+
+    // command = _up+_ui+_ud;
+    command = _ui;
+    if(command<-_pidLimit)
+    {
+      command = -_pidLimit;
+    }
+    else if(command>_pidLimit)
+    {
+      command = _pidLimit;
+    }
   }
+  else
+  {
+    command = 0.0f;
+    _ui = 0.0f;
+  }
+  if(_usePid)
+  {
+    // float error = _targetForce-fabs(_filteredWrench(2));
+    float error = _targetForce-_forceNorm;
+    // float alpha = (1.0f-std::tanh(50*normalDistance));
+    // float beta = (-std::tanh(50*normalDistance));
+    // float alpha = -std::tanh(_B*(vn.norm()-_C));
+    float alpha = 1-std::tanh(50*vn.norm());
+    float beta = -std::tanh(50*vn.norm());
+    // _xf += _dt*(0.04*alpha*error+0.01*beta*fabs(_filteredWrench(2)));
+    _xf += _dt*(_A*alpha*error+_C*beta*_targetForce);
+    // _xf += _dt*(_A*alpha*error+_C*beta*_forceNorm;
+    // _xf += _dt*(alpha*error-vn.norm())*0.01;
+    // _xf += _dt*(alpha*error)*0.01;
+    // _fc += _A*(alpha*error+beta*_targetForce);
+
+    if(_xf < -0.1*alpha)
+    {
+      _xf = -0.1*alpha;
+    }
+    else if(_xf > 0.3f)
+    {
+      _xf = 0.3f;
+    }
+    
+    // std::cerr << "d: " << normalDistance << " xf: " << _xf << " alpha: " << alpha << std::endl;
+    // std::cerr << "vn: " << vn.norm() << std::endl;
+  }
+  else
+  {
+    _xf = 0.0f;
+  }
+
+
+  // _vdes = (D*L*D.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-D.col(0)*D.col(0).transpose())*(xa-_pcur));
+  // _vdes = (D*L*D.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-D.col(0)*D.col(0).transpose())*(xa-_pcur)-_xf*_planeNormal);
+  // _vdes = (D*L*D.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-D.col(0)*D.col(0).transpose())*(xa-_pcur)+_xf*_wRb.col(2));
+
+
+  
+  if(_polishing)
+  {
+    _vdes = (D*L*D.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-D.col(0)*D.col(0).transpose())*getDesiredVelocity(_pcur,xa));
+    // _vdes = (D*L*D.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-D.col(0)*D.col(0).transpose())*getDesiredVelocity(_pcur,xa)-_xf*_planeNormal);
+  }
+  else
+  {
+    _vdes = (D*L*D.transpose())*((_xp-_pcur));
+    // _vdes = (D*L*D.transpose())*((_xp-_pcur)-_xf*_planeNormal);
+  }
+
+
+
+  // _vdes = _twist.segment(0,3);
+
+  // float ch= (1+std::tanh(40*((vcur).dot(_vdes)-0.01)))/2.0;
+  // _vdes = _vdes*ch+(1-ch)*vcur;
+  // std::cerr << "agreement: " << (vcur).dot(_vdes) << " gain: " << ch << std::endl;
+  if(_vdes.norm()>0.3f)
+  {
+    _vdes *= 0.3f/_vdes.norm();
+  }
+  // std::cerr << _ui << std::endl;
+
+  if(_usePid)
+  {  
+    // float gamma = -std::tanh(10*(fabs(_filteredWrench(2))-2.0f));
+    // // float gamma = 5.0f;
+    // _fdis += gamma*(0.01-vcur.norm());
+
+    // if(_fdis < 0)
+    // {
+    //   _fdis = 0;
+    // }
+    // else if(_fdis > 30.0f)
+    // {
+    //   _fdis = 30.0f;
+    // }
+
+
+    // float alpha = -std::tanh(_B*(vcur.norm()-_C));
+    // // float alpha = -std::tanh(_B*(((_planeNormal*_planeNormal.transpose())*vcur).norm()-_C));
+    // // float alpha = (1-std::tanh(10000*vcur.norm()));
+    // float error = _targetForce-fabs(_filteredWrench(2));
+    // float beta = -std::tanh(_B*vcur.norm());
+    // // _fc += _A*(alpha*error+beta*fabs(_filteredWrench(2)));
+    // _fc += _A*(alpha*error+beta*fabs(_filteredWrench(2)));
+    // // _fc += _A*(alpha*error+beta*_targetForce);
+
+    // float error = _targetForce-fabs(_filteredWrench(2));
+    // float alpha = (1.0f-std::tanh(50*normalDistance));
+    // float beta = (-std::tanh(50*normalDistance));
+    // float alpha = -std::tanh(_B*(vn.norm()-_C));
+
+    float error = _targetForce-_forceNorm;
+    float alpha = 1-std::tanh(50*vn.norm());
+    float beta = -std::tanh(50*vn.norm());
+    _fc += _dt*(_D*alpha*error+_E*beta*_targetForce);
+    // _xf += _dt*(_D*alpha*error+_E*beta*fn.norm());
+    // _xf += _dt*(alpha*error-vn.norm())*0.01;
+    // _xf += _dt*(alpha*error)*0.01;
+    // _fc += _A*(alpha*error+beta*_targetForce);
+
+
+    if(_fc < -20*alpha)
+    {
+      _fc = -20*alpha;
+    }
+    else if(_fc > 30.0f)
+    {
+      _fc = 30.0f;
+    }
+
+    _fc += _dt*(_D*alpha*error+_E*beta*_targetForce);
+
+    // _contactForce = _fc*D.col(0);
+    // _contactForce = _fc*_wRb.col(2);
+    _contactForce.setConstant(0.0f);
+    // _vdes = (D*L*D.transpose())*((_xp-_pcur)+command*D.col(0));
+    std::cerr << "alpha: " << alpha << " Fc: " << _fc << " vn: " << vn.norm() << std::endl;
+    // std::cerr << "alpha: " << alpha << " beta: " << beta << " F contact: " << _fc << " vcur: " << vcur.norm() << std::endl;
+  }
+  else
+  {
+    _fc = 0.0f;
+    _contactForce.setConstant(0.0f);
+  }
+
+  float lambda1 = 80;
+  float lambda2 = 50;
+  Eigen::Matrix3f Dp;
+  Eigen::Vector3f dir;
+  Eigen::Vector3f df;
+
+  if(_vdes.norm()> 1e-6)
+  {
+    dir = _vdes/_vdes.norm();
+    Dp = lambda1*(dir*dir.transpose())+lambda2*(Eigen::Matrix3f::Identity()-dir*dir.transpose());
+    df = Dp.inverse()*(_fc*D.col(0));
+  }
+  else
+  {
+    Dp = lambda2*Eigen::Matrix3f::Identity();
+    df = Dp.inverse()*(_fc*D.col(0));
+  }
+  
+  _vdes += df;
 
   Eigen::Vector3f k;
   k = (-_wRb.col(2)).cross(_planeNormal);
-  s = k.norm();
+  float s = k.norm();
   k /= s;
+  Eigen::Matrix3f K;
   K << 0.0f, -k(2), k(1),
        k(2), 0.0f, -k(0),
        -k(1), k(0), 0.0f;
 
-  c = (-_wRb.col(2)).transpose()*_planeNormal;
-
+  float c = (-_wRb.col(2)).transpose()*_planeNormal;
+    
   Eigen::Matrix3f Re = Eigen::Matrix3f::Identity()+s*K+(1-c)*K*K;
   
   // Get axis angle representation
@@ -326,6 +577,100 @@ void  ContactSurfaceController::computeCommand()
   omega << vec.x(), vec.y(), vec.z();
   omega *= angle;
 
+  // _omegades = omega+0.4f*_wRb*torque;
+  // _qdes = _qcur;
+
+  Eigen::Matrix3f Rdes = Re*_wRb;
+  Eigen::Vector4f qf = rotationMatrixToQuaternion(Rdes);
+  // _qdes = slerpQuaternion(_qcur,qf,std::tanh(0.02/normalDistance));
+  _qdes = slerpQuaternion(_qcur,qf,1-std::tanh(5*normalDistance));
+  _omegades.setConstant(0.0f);
+  // quaternionToAxisAngle(qf,omega,angle);
+
+  Eigen::Vector4f qcurI, wq;
+  qcurI(0) = _qcur(0);
+  qcurI.segment(1,3) = -_qcur.segment(1,3);
+  wq = 2.0f*quaternionProduct(qcurI,_qdes-_qcur);
+  Eigen::Vector3f omegaTemp = _wRb*wq.segment(1,3);
+  _omegades = omegaTemp;
+  // _omegades = omegaTemp+0.3*_wRb*torque;
+// 
+
+  // _xp += -_planeNormal*0.01;
+
+  // float ch = 0;
+  // if(vcur.norm() < 1e-5f || _vdes.norm() < 1e-5f)
+  // {
+  //   ch = 1.0f;
+  // }
+  // else
+  // {
+  //   // ch = (1+std::tanh(10*(vcur).dot(_vdes)/(vcur.norm()*_vdes.norm())-0.1f))/2.0;
+  //   ch = (1+std::tanh(5*(vcur).dot(_vdes)/(vcur.norm()*_vdes.norm())-0.5f))/2.0;
+  // }
+
+
+  // _contactForce.setConstant(0.0f);
+  // float beta = (1.0f-cos(fabs(_filteredWrench(2))*M_PI/(_targetForce)))/2.0f;
+  // _fc += std::tanh(1e-5f/vcur.norm())*0.1f*(beta*_targetForce-fabs(_filteredWrench(2)))
+  // if(fabs(_filteredWrench(2)) > _targetForce)
+  // {
+  //   beta = 1.0f;
+  // }
+
+  // float alpha = -_A*std::tanh(_B*(vcur.norm()-_C));
+  // _fc += alpha*(_targetForce-fabs(_filteredWrench(2)));
+
+  // _vdes = (D*L*D.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-D.col(0)*D.col(0).transpose())*(xa-_pcur)+command*D.col(0));
+  // if(normalDistance<1e-2f)
+  // {
+  //   if(!_firstClose)
+  //   {
+  //     std::cerr << "asasdasfdafasgfasgas" << std::endl;
+  //     std::cerr << normalDistance << std::endl;
+  //   }
+  //   _taskAttractor << _pcur(0), _pcur(1), 0.22f;
+  //   normalDistance = (_planeNormal*_planeNormal.transpose()*(_pcur-_taskAttractor)).norm();
+  //   if(!_firstClose)
+  //   {
+  //     std::cerr << normalDistance << std::endl;
+  //     _firstClose = true;
+  //   }  
+  // }
+  // Eigen::Matrix3f L = Eigen::Matrix3f::Zero();
+  // L(0,0) = 2.0f*normalDistance;
+  // L(1,1) = 2.0f*normalDistance+0.1f*std::exp(-normalDistance);
+  // L(2,2) = 2.0f*normalDistance+0.1f*std::exp(-normalDistance);
+
+
+  // Eigen::Matrix3f D;
+  // D.col(0) = -_planeNormal;
+  // D.col(1) = (Eigen::Matrix3f::Identity()-_planeNormal*_planeNormal.transpose())*_desiredDir;
+  // D.col(1) = D.col(1)/(D.col(1).norm());
+  // D.col(2) = (D.col(0)).cross(D.col(1));
+  
+  // Eigen::Matrix3f L = Eigen::Matrix3f::Zero();
+  // L(0,0) = 2.0f*normalDistance;
+  // L(1,1) = 2.0f*normalDistance+0.1f*std::exp(-normalDistance);
+  // L(2,2) = 2.0f*normalDistance+0.1f*std::exp(-normalDistance);
+
+  // _dir = -(_pcur-_taskAttractor);
+  // _dir /= _dir.norm();
+
+  // Eigen::Vector3f u = _dir.cross(D.col(1));
+  // float c = _dir.dot(D.col(1));
+  // float s = u.norm();
+  // u/=s;
+
+  // float theta = std::atan2(delta,normalDistance)*std::acos(c)/(M_PI/2.0f);
+
+  // Eigen::Matrix3f K = getSkewSymmetricMatrix(u);
+  // Eigen::Matrix3f R = Eigen::Matrix3f::Identity()+std::sin(theta)*K+(1.0f-cos(theta))*K*K;
+
+
+  // _vdes = (D*L*D.transpose())*(R*_dir);
+
+
   // std::cerr << omega.transpose() << std::endl;
 
 
@@ -335,12 +680,47 @@ void  ContactSurfaceController::computeCommand()
   // std::cerr << (acos(c)*k).transpose() << std::endl;
 
   // _omegades = acos(c)*k;
+  // Eigen::Vector4f q;
+  // q = _qdes;
+  // Eigen:: Vector4f wq;
+  // wq << 0.0f, _wRb.transpose()*omega;
+  // Eigen::Vector4f dq = quaternionProduct(q,wq);
+  // q += 0.5f*_dt*dq;
+  // q /= q.norm();
+  // _qdes = q;   
+  // _omegades = omega;
 
-  Eigen::Matrix3f Rdes = Re*_wRb;
-  _qdes = rotationMatrixToQuaternion(Rdes);
+
+  // std::cerr << D << std::endl;
+
+  // std::cerr << L << std::endl;
+
+  // std::cerr << "task attractor: " << std::endl;
+  // std::cerr << _taskAttractor.transpose() << std::endl;
+
+  // std::cerr << "exp: " << std::endl;
+
+  // std::cerr << (_xp-_pcur).transpose() << std::endl;
+  // std::cerr << "exa: " << std::endl;
+
+
+  // std::cerr << _vdes.transpose() << std::endl;
+
+  // std::cerr << _taskAttractor.transpose() << std::endl;
+
+  // std::cerr << (R*_dir).transpose() << std::endl;
+
+  // Eigen::Matrix3f Rdes = Re*_wRb;
+  // _qdes = rotationMatrixToQuaternion(Rdes);
+
+  // _omegades.setConstant(0.0f);
+
+  // std::cerr << omegaTemp.transpose() << " : " << _twist.segment(3,3).transpose() << std::endl;
   // _qdes << w,x,y,z;
   // std::cerr << _taskAttractor.transpose() << std::endl;
-  std::cerr << "d: " << normalDistance << " vdes: " << _vdes.transpose() << " norm: " << _vdes.norm() << std::endl;
+  // std::cerr << "d: " << normalDistance << " vdes: " << _vdes.transpose() << " norm: " << _vdes.norm() << std::endl;
+  // std::cerr << "d: " << normalDistance << " vcur: " << vcur.norm() << std::endl;
+  // std::cerr << "gamma: " << gamma << " F contact: " << _fdis << " vcur: " << vcur.norm() << std::endl;
 }
 
 
@@ -495,9 +875,31 @@ void ContactSurfaceController::publishData()
 
   _msgMarker.header.frame_id = "world";
   _msgMarker.header.stamp = ros::Time();
-  _msgMarker.pose.position.x = _taskAttractor(0);
-  _msgMarker.pose.position.y = _taskAttractor(1);
-  _msgMarker.pose.position.z = _taskAttractor(2);
+  Eigen::Vector3f center = _p1+0.5f*(_p2-_p1)+0.5f*(_p3-_p1); 
+  _msgMarker.pose.position.x = center(0);
+  _msgMarker.pose.position.y = center(1);
+  _msgMarker.pose.position.z = center(2);
+  Eigen::Vector3f u,v,n;
+  u = _p3-_p1;
+  v = _p2-_p1;
+  u /= u.norm();
+  v /= v.norm();
+  n = u.cross(v);
+  Eigen::Matrix3f R;
+  R.col(0) = u;
+  R.col(1) = v;
+  R.col(2) = n;
+  Eigen::Vector4f q = rotationMatrixToQuaternion(R);
+
+
+  _msgMarker.pose.orientation.x = q(1);
+  _msgMarker.pose.orientation.y = q(2);
+  _msgMarker.pose.orientation.z = q(3);
+  _msgMarker.pose.orientation.w = q(0);
+
+  // _msgMarker.pose.position.x = _p(0);
+  // _msgMarker.pose.position.y = _p(1);
+  // _msgMarker.pose.position.z = _p(2);
   _pubMarker.publish(_msgMarker);
 
   std_msgs::Float32 msg;
@@ -518,6 +920,15 @@ void ContactSurfaceController::publishData()
   _msgFilteredWrench.wrench.torque.z = _filteredWrench(5);
   _pubFilteredWrench.publish(_msgFilteredWrench);
 
+
+  _msgDesiredWrench.force.x = _contactForce(0);
+  _msgDesiredWrench.force.y = _contactForce(1);
+  _msgDesiredWrench.force.z = _contactForce(2);
+  _msgDesiredWrench.torque.x = 0.0f;
+  _msgDesiredWrench.torque.y = 0.0f;
+  _msgDesiredWrench.torque.z = 0.0f;
+  _pubDesiredWrench.publish(_msgDesiredWrench);
+
   _mutex.unlock();
 }
 
@@ -535,6 +946,11 @@ void ContactSurfaceController::updateRealPose(const geometry_msgs::Pose::ConstPt
        _Rcur.UnitX().y(), _Rcur.UnitY().y(), _Rcur.UnitZ().y(), 
        _Rcur.UnitX().z(), _Rcur.UnitY().z(), _Rcur.UnitZ().z();
 
+  _pcur = _pcur+_toolOffset*_wRb.col(2);
+
+  // _xp = _pcur;
+  // _xp(2) = (-_planeNormal(0)*(_xp(0)-_p(0))-_planeNormal(1)*(_xp(1)-_p(1))+_planeNormal(2)*_p(2))/_planeNormal(2);
+
   if(!_firstRealPoseReceived)
   {
     _firstRealPoseReceived = true;
@@ -543,8 +959,10 @@ void ContactSurfaceController::updateRealPose(const geometry_msgs::Pose::ConstPt
     _vdes.setConstant(0.0f);
     _dir = _wRb.col(2);
     float s = -(_planeNormal.dot(_pcur-_p))/(_planeNormal.dot(_dir));
-    _taskAttractor = _pcur+s*_dir;
+    // _taskAttractor = _pcur+s*_dir;
     _angle = std::acos(_planeTangent.dot(_dir));
+    // xp = xcur;
+
   }
 }
 
@@ -591,7 +1009,7 @@ void ContactSurfaceController::updateMeasuredWrench(const geometry_msgs::WrenchS
     Eigen::Vector3f loadForce = _wRb.transpose()*_loadMass*_gravity;
     _wrench.segment(0,3) -= loadForce;
     _wrench.segment(3,3) -= _loadOffset.cross(loadForce);
-    _filteredWrench = _filteredGain*_filteredWrench+(1.0f-_filteredGain)*_wrench;
+    _filteredWrench = _filteredForceGain*_filteredWrench+(1.0f-_filteredForceGain)*_wrench;
   }
 
 }
@@ -608,33 +1026,74 @@ void ContactSurfaceController::updateMeasuredTwist(const geometry_msgs::Twist::C
 }
 
 
-// void ContactSurfaceController::dynamicReconfigureCallback(foot_interfaces::footMouseController_paramsConfig &config, uint32_t level)
-// {
-//   ROS_INFO("Reconfigure request bou. Updatig the parameters ...");
+void ContactSurfaceController::updateRobotBasisPose(const geometry_msgs::PoseStamped::ConstPtr& msg) 
+{
+  _robotBasisPosition << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
 
-//   _arbitrationLimit = config.arbitrationLimit;
-//   _agreementWeight = config.agreementWeight;
-//   _attractorWeight = config.attractorWeight;
-//   _d1 = config.d1;
-//   _d2 = config.d2;
-//   _linearSpeedGain = config.linearSpeedGain;
-//   _angularSpeedGain = config.angularSpeedGain;
-//   _filteredGain = config.filteredGain;
-//   _contactForceThreshold = config.contactForceThreshold;
-//   _usePid = config.usePid;
-//   _targetForce = config.targetForce;
-//   _pidLimit = config.pidLimit;
-//   _kp = config.kp;
-//   _ki = config.ki;
-//   _kd = config.kd;
+  _robotBasisPosition(2) -= 0.025f;
+  if(!_firstRobotBasisPose)
+  {
+    _firstRobotBasisPose = true;
+  }
+}
 
-//   _convergenceRate = config.convergenceRate;
-//   _zVelocity = config.zVelocity;
-//   _linearVelocityLimit = config.linearVelocityLimit;
-//   _angularVelocityLimit = config.angularVelocityLimit;
-//   _modeThreeTranslation = config.modeThreeTranslation;
 
-// }
+void ContactSurfaceController::updatePlane1Pose(const geometry_msgs::PoseStamped::ConstPtr& msg) 
+{
+  _plane1Position << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
+
+  if(!_firstPlane1Pose)
+  {
+    _firstPlane1Pose = true;
+  }
+}
+
+
+void ContactSurfaceController::updatePlane2Pose(const geometry_msgs::PoseStamped::ConstPtr& msg) 
+{
+  _plane2Position << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
+
+  if(!_firstPlane2Pose)
+  {
+    _firstPlane2Pose = true;
+  }
+}
+
+
+void ContactSurfaceController::updatePlane3Pose(const geometry_msgs::PoseStamped::ConstPtr& msg) 
+{
+  _plane3Position << msg->pose.position.x, msg->pose.position.y, msg->pose.position.z;
+
+  if(!_firstPlane3Pose)
+  {
+    _firstPlane3Pose = true;
+  }
+}
+
+
+void ContactSurfaceController::dynamicReconfigureCallback(foot_interfaces::contactSurfaceController_paramsConfig &config, uint32_t level)
+{
+  ROS_INFO("Reconfigure request bou. Updatig the parameters ...");
+
+  _convergenceRate = config.convergenceRate;
+  _xOffset = config.xOffset;
+  _yOffset = config.yOffset;
+  _filteredForceGain = config.filteredForceGain;
+  _contactForceThreshold = config.contactForceThreshold;
+  _targetForce = config.targetForce;
+  _usePid = config.usePid;
+  _polishing = config.polishing;
+  _pidLimit = config.pidLimit;
+  _kp = config.kp;
+  _ki = config.ki;
+  _kd = config.kd;
+  _A = config.A;
+  _B = config.B;
+  _C = config.C;
+  _D = config.D;
+  _E = config.E;
+
+}
 
 
 Eigen::Vector4f ContactSurfaceController::quaternionProduct(Eigen::Vector4f q1, Eigen::Vector4f q2)
@@ -752,4 +1211,61 @@ void ContactSurfaceController::quaternionToAxisAngle(Eigen::Vector4f q, Eigen::V
 
   angle = 2*std::acos(q(0));
 
+}
+
+  Eigen::Vector4f ContactSurfaceController::slerpQuaternion(Eigen::Vector4f q1, Eigen::Vector4f q2, float t)
+  {
+
+    Eigen::Vector4f q;
+
+    // Change sign of q2 if dot product of the two quaterion is negative => allows to interpolate along the shortest path
+    if(q1.dot(q2)<0.0f)
+    {   
+      q2 = -q2;
+    }
+
+    float dotProduct = q1.dot(q2);
+    if(dotProduct > 1.0f)
+    {
+      dotProduct = 1.0f;
+    }
+    else if(dotProduct < -1.0f)
+    {
+      dotProduct = -1.0f;
+    }
+
+    float omega = acos(dotProduct);
+
+    if(std::fabs(omega)<FLT_EPSILON)
+    {
+      q = q1.transpose()+t*(q2-q1).transpose();
+    }
+    else
+    {
+      q = (std::sin((1-t)*omega)*q1+std::sin(t*omega)*q2)/std::sin(omega);
+    }
+
+    return q;
+  }
+
+  Eigen::Vector3f ContactSurfaceController::getDesiredVelocity(Eigen::Vector3f position, Eigen::Vector3f attractor)
+{
+  Eigen::Vector3f velocity;
+
+  position = position-attractor;
+
+  velocity(2) = -position(2);
+
+  float R = sqrt(position(0) * position(0) + position(1) * position(1));
+  float T = atan2(position(1), position(0));
+
+//  // double alpha = Convergence_Rate_ * Convergence_Rate_scale_;
+//  // double omega = Cycle_speed_ + Cycle_speed_offset_;
+ float r = 0.05f;
+ float omega = M_PI;
+
+  velocity(0) = -(R-r) * cos(T) - R * omega * sin(T);
+  velocity(1) = -(R-r) * sin(T) + R * omega * cos(T);
+
+  return velocity;
 }
