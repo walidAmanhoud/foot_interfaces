@@ -184,8 +184,8 @@ class ContactSurfaceController
     float _A;
     float _B;
     float _C;
-    float _D;
-    float _E;
+    float _forceStiffnessRateGain;
+    float _forceDampingRateGain;
     bool _polishing;
 
     float _fdis;
@@ -204,7 +204,8 @@ class ContactSurfaceController
 	Eigen::Vector3f _p3;
 
 	float _xf;
-
+	bool _controlForce;
+	bool _splitForceFromMotion;
 
 	static ContactSurfaceController* me;
 
