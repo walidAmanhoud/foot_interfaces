@@ -32,7 +32,7 @@
 #include "geometry_msgs/Twist.h"
 
 #define NB_SAMPLES 50
-#define MAX_XY_REL 80
+#define MAX_XY_REL 300
 #define MAX_FRAME 200
 
 class ContactSurfaceController 
@@ -154,7 +154,7 @@ class ContactSurfaceController
     float _xOffset;
     float _yOffset;
     float _zVelocity;             // Velocity along Z axis [m/s]
-    float _linearVelocityLimit;   // Linear velocity limit [m/s]
+    float _linearVelocityLimit = 0.1f;   // Linear velocity limit [m/s]
     float _angularVelocityLimit;  // Angular velocity limit [rad/s]
     bool _modeThreeTranslation;   // Control mode (true: X,Y,Z translations / false: roll,pitch rotations + insertion,withdraw)
 
@@ -207,6 +207,11 @@ class ContactSurfaceController
 	bool _controlForce;
 	bool _splitForceFromMotion;
 
+	bool _firstControl =  false;
+
+	bool _linear;
+	float _userVelocityLimit;
+
 	static ContactSurfaceController* me;
 
 			// Dynamic reconfigure (server+callback)
@@ -228,6 +233,8 @@ class ContactSurfaceController
 		static void stopNode(int sig);
 		
     void computeCommand();
+    void autonomousControl();
+    void autonomousControl2();
 
     void processCursorEvent(float relX, float relY, bool newEvent);
 

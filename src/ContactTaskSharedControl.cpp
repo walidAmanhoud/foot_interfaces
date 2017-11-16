@@ -325,8 +325,8 @@ void ContactTaskSharedControl::computeTaskVelocity()
 
 void ContactTaskSharedControl::forceTask()
 {
-  bool useWorldFrame = false;
-  bool updateQuaternion = true;
+  bool useWorldFrame = true;
+  bool updateQuaternion = false;
   float stiffnessGain = 2.0f;
   float dampingGain = 0.0f;
 
@@ -343,11 +343,13 @@ void ContactTaskSharedControl::forceTask()
   Eigen::Vector3f tangentialForce;
   Eigen::Vector3f vmes = _twist.segment(0,3);
 
+  Eigen::Vector3f v = orthogonalProjector*vmes;
   // if(_twist.segment(0,3).norm()>1e-3f)
   // {
   // std::cerr << vb.norm() << " " << torque.norm() << std::endl;
     
   // }
+  // if(v.norm()>1e-3f)// || (force.norm() > _targetForce && _twist.segment(0,3).norm() > 1e-3f))
   if(vb.norm()>1e-3f)// || (force.norm() > _targetForce && _twist.segment(0,3).norm() > 1e-3f))
   {
     // frictionComponent = force.dot(vb/vb.norm())*vb/vb.norm(); 

@@ -26,8 +26,8 @@ ContactSurfaceController::ContactSurfaceController(ros::NodeHandle &n, double fr
   _qcur.setConstant(0.0f);
   _qdes.setConstant(0.0f);
   _attractorPosition.setConstant(0.0f);
-  _taskAttractor << -0.5f, -0.4f, 0.186f;
-  _taskAttractor << -0.74f, -0.170f, 0.186f;
+  _taskAttractor << -0.6f, -0.3f, 0.186f;
+  // _taskAttractor << -0.74f, -0.170f, 0.186f;
   _planeNormal << 0.0f, 0.0f, 1.0f;
   _planeTangent << 0.0f, -1.0f, 0.0f;
   _p <<0.0f,0.0f,0.186f;
@@ -138,6 +138,8 @@ ContactSurfaceController::ContactSurfaceController(ros::NodeHandle &n, double fr
   _fc = 0.0f;
   _fdis = 0.0f;
   _xf = 0.0f;
+  _xOffset = 0.0f;
+  _yOffset = 0.0f;
 }
 
 
@@ -191,7 +193,7 @@ void ContactSurfaceController::run()
   while (!_stop) 
   {
     // if(_firstRealPoseReceived && _wrenchBiasOK)
-    if(_firstRealPoseReceived && _wrenchBiasOK &&
+    if(_firstRealPoseReceived && _wrenchBiasOK && _firstEventReceived &&//)// &&
        _firstRobotBasisPose && _firstPlane1Pose &&
        _firstPlane2Pose && _firstPlane3Pose)
     {
@@ -229,42 +231,142 @@ void ContactSurfaceController::stopNode(int sig)
   me->_stop = true;
 }
 
-
 void  ContactSurfaceController::computeCommand()
 {
-  
-  // Extract linear speed, force and torque data
+  uint8_t event;
+  int buttonState, relX, relY, relWheel;
+  float filteredRelX = 0.0f, filteredRelY = 0.0f;
+  bool newEvent = false;
+
+  // If new event received update last event
+  // Otherwhise keep the last one
+  if(_msgFootMouse.event > 0)
+  {
+    _lastEvent = _msgFootMouse.event;
+    buttonState = _msgFootMouse.buttonState;
+    relX = _msgFootMouse.relX;
+    relY = _msgFootMouse.relY;
+    relWheel = _msgFootMouse.relWheel;
+    filteredRelX = _msgFootMouse.filteredRelX;
+    filteredRelY = _msgFootMouse.filteredRelY;
+    newEvent = true;
+  }
+  else
+  {
+    buttonState = 0;
+    relX = 0;
+    relY = 0;
+    relWheel = 0;
+    filteredRelX = 0;
+    filteredRelY = 0;
+    newEvent = false;
+  }
+
+  event = _lastEvent;
+
+  // Process corresponding event
+  switch(event)
+  {
+    // case foot_interfaces::FootMouseMsg::FM_BTN_A:
+    // {
+    //   processABButtonEvent(buttonState,newEvent,-1.0f);
+    //   break;
+
+    // }
+    // case foot_interfaces::FootMouseMsg::FM_BTN_B:
+    // {
+    //   processABButtonEvent(buttonState,newEvent,1.0f);
+    //   break;
+    // }
+    // case foot_interfaces::FootMouseMsg::FM_RIGHT_CLICK:
+    // {
+    //   // processRightClickEvent(buttonState,newEvent);
+    //   break;
+    // }
+    // // case foot_interfaces::FootMouseMsg::FM_RIGHT_CLICK:
+    // // {
+    // //   processABButtonEvent(buttonState,newEvent,1.0f);
+    // //   // processRightClickEvent(buttonState,newEvent);
+    // //   break;
+    // // }
+    case foot_interfaces::FootMouseMsg::FM_CURSOR:
+    {
+      processCursorEvent(filteredRelX,filteredRelY,newEvent);
+      break;
+    }
+    default:
+    {
+      break;
+    }
+  }
+
+  autonomousControl();
+}
+
+void  ContactSurfaceController::autonomousControl2()
+{
+
+ // Extract linear speed, force and torque data
   Eigen::Vector3f vcur = _twist.segment(0,3);
   Eigen::Vector3f force = _filteredWrench.segment(0,3);  
   Eigen::Vector3f torque = _filteredWrench.segment(3,3);
 
-  // Compute plane normal form markers position
-  _p1 = _plane1Position-_robotBasisPosition;
-  _p2 = _plane2Position-_robotBasisPosition;
-  _p3 = _plane3Position-_robotBasisPosition;
-  Eigen::Vector3f p13,p12;
-  p13 = _p3-_p1;
-  p12 = _p2-_p1;
-  p13 /= p13.norm();
-  p12 /= p12.norm();
-  _planeNormal = p13.cross(p12);
+  Eigen::Vector3f fn = (_wRb.col(2)*_wRb.col(2).transpose())*(_wRb*force);
+  Eigen::Matrix3f orthogonalProjector = Eigen::Matrix3f::Identity()-_wRb.col(2)*_wRb.col(2).transpose();
 
-  std::cerr << "plane normal: " << _planeNormal.transpose() << std::endl;
+  Eigen::Vector3f v = orthogonalProjector*vcur;
+
+  Eigen::Vector3f frictionComponent;
+  // Eigen::Vector3f vb = _vuser(1)*_wRb.col(1);
+  Eigen::Vector3f tangentialForce;
+  Eigen::Vector3f vmes = _twist.segment(0,3);
+
+  if(v.norm()>1e-2f)// || (force.norm() > _targetForce && _twist.segment(0,3).norm() > 1e-3f))
+  {
+    // frictionComponent = force.dot(vb/vb.norm())*vb/vb.norm(); 
+    frictionComponent = orthogonalProjector*force;
+  }
+  else
+  {
+    frictionComponent.setConstant(0.0f);
+  }
+  fn = _wRb*(force-frictionComponent);
+  Eigen::Vector3f normalDirection = fn/fn.norm();
+
+  if(force.norm()> _contactForceThreshold)
+  { 
+    // if(v.norm()>1e-2)
+    // {
+    //   _planeNormal = fn/fn.norm(); 
+    //       // std::cerr << "fn: " <<  (fn/fn.norm()).transpose() << std::endl;
+    // }
+    // else
+    {
+      // _planeNormal = _wRb*force/force.norm();
+      _planeNormal = normalDirection;
+    }
+
+  }
+  // else
+  // {
+  //   _planeNormal << 0.0f,0.0f,1.0f;
+  // }
+  std::cerr << "plane normal: " << _planeNormal.transpose() << " v: " << v.norm() <<std::endl;
+  std::cerr << "plane normal 2: " << normalDirection.transpose() <<std::endl;
 
   // Compute projected force and speed along plane normal
-  Eigen::Vector3f fn = (_planeNormal*_planeNormal.transpose())*force;
+  // fn = (_planeNormal*_planeNormal.transpose())*force;
   Eigen::Vector3f vn = (_planeNormal*_planeNormal.transpose())*vcur;
 
   // Compute norm of the projected force along plane normal
   _forceNorm = fn.norm();
 
-  // Compute vertical projection of the current position onto the plane
-  _xp = _pcur;
-  _xp(2) = (-_planeNormal(0)*(_xp(0)-_p3(0))-_planeNormal(1)*(_xp(1)-_p3(1))+_planeNormal(2)*_p3(2))/_planeNormal(2);
-  // _xp(2) = (-_planeNormal(0)*(_xp(0)-_p(0))-_planeNormal(1)*(_xp(1)-_p(1))+_planeNormal(2)*_p(2))/_planeNormal(2);
+  _p1 = _plane1Position-_robotBasisPosition;
+  _p2 = _plane2Position-_robotBasisPosition;
+  _p3 = _plane3Position-_robotBasisPosition;
 
   // Compute normal distance to the plane
-  float normalDistance = (_planeNormal*_planeNormal.transpose()*(_pcur-_xp)).norm();
+  float normalDistance = 0.0f;
 
   // Compute canonical basis used to decompose the desired dynamics along the plane frame
   // D = [-n o p]
@@ -287,11 +389,11 @@ void  ContactSurfaceController::computeCommand()
 
   // Compute fixed attractor on plane
   Eigen::Vector3f xa;
-  xa = _p1+0.8*(_p2-_p1)+0.5*(_p3-_p1);
-  // xa = _taskAttractor;
+  // xa = _p1+0.8*(_p2-_p1)+0.5*(_p3-_p1);
+  xa = _taskAttractor;
   // xa(0) += _xOffset;
   // xa(1) += _yOffset;
-  xa(2) = (-_planeNormal(0)*(xa(0)-_p1(0))-_planeNormal(1)*(xa(1)-_p1(1))+_planeNormal(2)*_p1(2))/_planeNormal(2);
+  // xa(2) = (-_planeNormal(0)*(xa(0)-_p1(0))-_planeNormal(1)*(xa(1)-_p1(1))+_planeNormal(2)*_p1(2))/_planeNormal(2);
   // xa(2) = (-_planeNormal(0)*(xa(0)-_p(0))-_planeNormal(1)*(xa(1)-_p(1))+_planeNormal(2)*_p(2))/_planeNormal(2);
   std::cerr << "xa: " << xa.transpose() << std::endl;
 
@@ -300,15 +402,18 @@ void  ContactSurfaceController::computeCommand()
   // = sum of linear dynamics coming from moving and fixed attractors
   if(_polishing)
   {
-    _vdes = (B*L*B.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-B.col(0)*B.col(0).transpose())*getDesiredVelocity(_pcur,xa));
-    // _vdes = (B*L*B.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-B.col(0)*B.col(0).transpose())*getDesiredVelocity(_pcur,xa)-_xf*_planeNormal);
+    // _vdes = (B*L*B.transpose())*((Eigen::Matrix3f::Identity()-B.col(0)*B.col(0).transpose())*(_vuser(1)*_wRb.col(0)+_vuser(0)*_wRb.col(1)));
+    _vdes = (B*L*B.transpose())*((Eigen::Matrix3f::Identity()-B.col(0)*B.col(0).transpose())*getDesiredVelocity(_pcur,xa));
+    // _vdes.setConstant(0.0f);
+    std::cerr << _vuser(1) <<  " " << _vuser(0) << std::endl;
   }
   else
   {
-    _vdes = (B*L*B.transpose())*((_xp-_pcur));
+    // _vdes = (B*L*B.transpose())*((_xp-_pcur));
+    _vdes.setConstant(0.0f);
     // _vdes = (B*L*B.transpose())*((_xp-_pcur)-_xf*_planeNormal);
   }
-
+  // _vdes.setConstant(0.0f);
 
   // Check if force control activated and compute contact force following the specified dynamics
   if(_controlForce)
@@ -327,9 +432,15 @@ void  ContactSurfaceController::computeCommand()
 
     // Saturate contact force
     // std::tanh(0.4*_forceNorm)
-    if(_fc < -20*alpha)
+    // if(_fc < -20*(alpha))
+    // {
+    //   _fc = -20*(alpha);    
+    // if(_fc < -20)
+    // {
+    //   _fc = -20;
+    if(_fc < -15*(alpha+std::tanh(0.4*_forceNorm)))
     {
-      _fc = -20*alpha;
+      _fc = -15*(alpha+std::tanh(0.4*_forceNorm));
     }
     else if(_fc > 30.0f)
     {
@@ -372,30 +483,45 @@ void  ContactSurfaceController::computeCommand()
   else
   {
     // Reform the damping matrix for passive ds control
-    float lambda1 = 80;
-    float lambda2 = 50;
-    Eigen::Matrix3f D;
-    Eigen::Vector3f dir;
+    // float lambda1 = 80;
+    // float lambda2 = 50;
+    // Eigen::Matrix3f D;
+    // Eigen::Vector3f dir;
 
-    if(_vdes.norm()> 1e-6)
-    {
-      dir = _vdes/_vdes.norm();
-      D = lambda1*(dir*dir.transpose())+lambda2*(Eigen::Matrix3f::Identity()-dir*dir.transpose());
-    }
-    else
-    {
-      D = lambda2*Eigen::Matrix3f::Identity();
-    }
+    // if(_vdes.norm()> 1e-6)
+    // {
+    //   // if(!_firstControl)
+    //   // {
+    //   //   _firstControl = true;
+    //   //   dir = _vdes/_vdes.norm();
+    //   //   // _vdes/_vdes.norm();
+    //   // }
+    //   // else
+    //   // {
+    //   //   dir = _dir;
+    //   // }
+    //   dir = _vdes/_vdes.norm();
+    //   D = lambda1*(dir*dir.transpose())+lambda2*(Eigen::Matrix3f::Identity()-dir*dir.transpose());
+    // }
+    // else
+    // {
+    //   D = lambda2*Eigen::Matrix3f::Identity();
+    // }
 
-    // Compute force speed offset using the inverse of the passive ds controller damping matrix
+    // // // Compute force speed offset using the inverse of the passive ds controller damping matrix
     Eigen::Vector3f vf;
-    vf = D.inverse()*(_fc*_wRb.col(2));
-    // _vdes += vf;
+    // vf = D.inverse()*(_fc*_wRb.col(2));
+    vf = (_C*_fc*_wRb.col(2));
+    _vdes += vf;
 
-    // Compute force attractor offset using the inverse of the motion dynamics
-    Eigen::Vector3f xf;
-    xf = (B*L*B.transpose()).inverse()*vf;
-    _vdes += (B*L*B.transpose()*xf);
+    // // Compute force attractor offset using the inverse of the motion dynamics
+    // Eigen::Vector3f xf;
+    // xf = (B*L*B.transpose()).inverse()*vf;
+    // _vdes += _C*_fc*_wRb.col(2);
+    // _vdes += (B*L*B.transpose()*xf);
+
+    std::cerr << "vf: " << vf.transpose() << std::endl;
+    _contactForce.setConstant(0.0f);
   }
 
   // Bound speed  
@@ -403,6 +529,282 @@ void  ContactSurfaceController::computeCommand()
   {
     _vdes *= 0.3f/_vdes.norm();
   }
+
+  // if(_vdes.norm()>1e-6)
+  // {
+  //   _dir = _vdes/_vdes.norm();
+  // }
+
+
+  // Compute rotation error between current orientation and plane orientation
+  // use Rodrigues' law
+  Eigen::Vector3f k;
+  k = (-_wRb.col(2)).cross(_planeNormal);
+  float c = (-_wRb.col(2)).transpose()*_planeNormal;  
+  float s = k.norm();
+  k /= s;
+  Eigen::Matrix3f K;
+  K << 0.0f, -k(2), k(1),
+       k(2), 0.0f, -k(0),
+       -k(1), k(0), 0.0f;
+
+  Eigen::Matrix3f Re = Eigen::Matrix3f::Identity()+s*K+(1-c)*K*K;
+  
+  // Convert rotation error into axis angle representation
+  float angle;
+  Eigen::Vector3f omega, damping;
+  Eigen::Vector4f qtemp = rotationMatrixToQuaternion(Re);
+  quaternionToAxisAngle(qtemp,omega,angle);
+
+  std::cerr << angle << std::endl;
+  if(fabs(angle)<M_PI/3.0f)
+  {
+    omega *= angle;
+
+    // Compute damping in world frame
+    damping = -fabs(std::acos(c))*_twist.segment(3,3);
+
+    float stiffnessGain = 2.0f;
+    float dampingGain = 0.0f;
+    float torqueGain = 0.6f;
+    _omegades = stiffnessGain*omega + dampingGain*damping+torqueGain*_wRb*torque;
+    _qdes = _qcur;    
+    
+  }
+  else
+  {
+    _contactForce.setConstant(0.0f);
+    _fc = 0.0f;
+    _omegades.setConstant(0.0f);
+    _qdes = _qcur;
+    std::cerr <<"bou" << std::endl;
+  }
+
+  // _omegades.setConstant(0.0f);
+  // _qdes = _qcur;
+
+}
+
+void  ContactSurfaceController::autonomousControl()
+{
+  
+  // Extract linear speed, force and torque data
+  Eigen::Vector3f vcur = _twist.segment(0,3);
+  Eigen::Vector3f force = _filteredWrench.segment(0,3);  
+  Eigen::Vector3f torque = _filteredWrench.segment(3,3);
+
+  // Compute plane normal form markers position
+  _p1 = _plane1Position-_robotBasisPosition;
+  _p2 = _plane2Position-_robotBasisPosition;
+  _p3 = _plane3Position-_robotBasisPosition;
+  Eigen::Vector3f p13,p12;
+  p13 = _p3-_p1;
+  p12 = _p2-_p1;
+  p13 /= p13.norm();
+  p12 /= p12.norm();
+  _planeNormal = p13.cross(p12);
+
+  std::cerr << "plane normal: " << _planeNormal.transpose() << std::endl;
+
+  // Compute projected force and speed along plane normal
+  Eigen::Vector3f fn = (_planeNormal*_planeNormal.transpose())*(_wRb*force);
+  Eigen::Vector3f vn = (_planeNormal*_planeNormal.transpose())*vcur;
+
+  // Compute norm of the projected force along plane normal
+  _forceNorm = fn.norm();
+
+  // Compute vertical projection of the current position onto the plane
+  _xp = _pcur;
+  _xp(2) = (-_planeNormal(0)*(_xp(0)-_p3(0))-_planeNormal(1)*(_xp(1)-_p3(1))+_planeNormal(2)*_p3(2))/_planeNormal(2);
+  // _xp(2) = (-_planeNormal(0)*(_xp(0)-_p(0))-_planeNormal(1)*(_xp(1)-_p(1))+_planeNormal(2)*_p(2))/_planeNormal(2);
+
+  // Compute normal distance to the plane
+  float normalDistance = (_planeNormal*_planeNormal.transpose()*(_pcur-_xp)).norm();
+
+  // Compute canonical basis used to decompose the desired dynamics along the plane frame
+  // D = [-n o p]
+  Eigen::Vector3f temp;
+  temp << 1.0f,0.0f,0.0f;
+  Eigen::Matrix3f B;
+  B.col(0) = -_planeNormal;
+  B.col(1) = (Eigen::Matrix3f::Identity()-_planeNormal*_planeNormal.transpose())*temp;
+  B.col(1) = B.col(1)/(B.col(1).norm());
+  B.col(2) = (B.col(0)).cross(B.col(1));
+
+  // Compute Weighted diagonal matrix
+  Eigen::Matrix3f L = Eigen::Matrix3f::Zero();
+  L(0,0) = _convergenceRate*(1-std::tanh(10*normalDistance));
+  // L(0,0) = 1.0f;
+  L(1,1) = _convergenceRate*(1-std::tanh(50*normalDistance));
+  L(2,2) = _convergenceRate*(1-std::tanh(50*normalDistance));
+  // L(1,1) = _convergenceRate*(1-std::tanh(50*vn.norm()));
+  // L(2,2) = _convergenceRate*(1-std::tanh(50*vn.norm()));
+  std::cerr << "normalDistance: " << normalDistance << " L: "<< L.diagonal().transpose() << std::endl;
+
+  // Compute fixed attractor on plane
+  Eigen::Vector3f xa;
+  xa = _p1+0.7*(_p2-_p1)+0.5*(_p3-_p1);
+
+  if(_linear || _polishing)
+  {
+    _xOffset += _vuser(0)*_dt;
+    _yOffset += _vuser(1)*_dt;
+    std::cerr << _xOffset << " " << _yOffset << std::endl;
+    xa(0) += _xOffset;
+    xa(1) += _yOffset;
+  }
+
+  // xa = _taskAttractor;
+  // xa(0) += _xOffset;
+  // xa(1) += _yOffset;
+  xa(2) = (-_planeNormal(0)*(xa(0)-_p1(0))-_planeNormal(1)*(xa(1)-_p1(1))+_planeNormal(2)*_p1(2))/_planeNormal(2);
+  // xa(2) = (-_planeNormal(0)*(xa(0)-_p(0))-_planeNormal(1)*(xa(1)-_p(1))+_planeNormal(2)*_p(2))/_planeNormal(2);
+  std::cerr << "xa: " << xa.transpose() << std::endl;
+
+
+  // Check if polishing motion is activated and compute desired velocity based on motion dynamics
+  // = sum of linear dynamics coming from moving and fixed attractors
+
+  float ch = std::max(0.0f, 1-normalDistance/0.1f);
+  if(_polishing)
+  {
+    _vdes = (B*L*B.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-B.col(0)*B.col(0).transpose())*getDesiredVelocity(_pcur,xa));
+    // _vdes = (B*L*B.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-B.col(0)*B.col(0).transpose())*getDesiredVelocity(_pcur,xa)-_xf*_planeNormal);
+  }
+  else if(_linear)
+  {
+    _vdes = (B*L*B.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-B.col(0)*B.col(0).transpose())*(xa-_pcur));
+  }
+  else
+  {
+    _vdes = (B*L*B.transpose())*((_xp-_pcur));
+    // _vdes = (B*L*B.transpose())*((_xp-_pcur)-_xf*_planeNormal);
+  }
+
+  std::cerr << "vdes: " << _vdes.transpose() << "ch: " << ch << std::endl;
+
+  // Check if force control activated and compute contact force following the specified dynamics
+  if(_controlForce)
+  {
+    // Compute force error
+    float error = _targetForce-_forceNorm;
+    
+    // Compute force stiffness rate gain from measured speed
+    float alpha = 1-std::tanh(50*vn.norm());
+
+    // Compute force damping damping rate gain from measured speed
+    float beta = 1-alpha;
+
+    // Integrate contact force dynamics
+    _fc += _dt*(_forceStiffnessRateGain*alpha*error-_forceDampingRateGain*beta*_targetForce);
+
+    // Saturate contact force
+    // std::tanh(0.4*_forceNorm)
+    // if(_fc < -20*(alpha))
+    // {
+    //   _fc = -20*(alpha);    
+    // if(_fc < -20)
+    // {
+    //   _fc = -20;
+
+    float gamma = std::tanh(0.4*_forceNorm);
+    if(_fc < -15*(alpha))
+    {
+      _fc = -15*(alpha);
+    }
+    else if(_fc > 30.0f)
+    {
+      _fc = 30.0f;
+    }
+
+    // float alpha = 1-std::tanh(50*vn.norm());
+    // float beta = -std::tanh(50*vn.norm());
+
+    // _xf += _dt*(_A*alpha*error+_C*beta*_targetForce);
+
+    // if(_xf < -0.1*alpha)
+    // {
+    //   _xf = -0.1*alpha;
+    // }
+    // else if(_xf > 0.3f)
+    // {
+    //   _xf = 0.3f;
+    // }
+    
+    // std::cerr << "d: " << normalDistance << " xf: " << _xf << " alpha: " << alpha << std::endl;
+    // std::cerr << "vn: " << vn.norm() << std::endl;
+
+    std::cerr << "alpha: " << alpha << " gamma: " << gamma << " fc: " << _fc << " vn: " << vn.norm() << std::endl;
+  }
+  else
+  {
+    // _xf = 0.0f;
+    _fc = 0.0f;
+    _contactForce.setConstant(0.0f);
+  }
+
+
+
+  if(_splitForceFromMotion)
+  {
+    // _contactForce = _fc*B.col(0);
+    _contactForce = _fc*_wRb.col(2);
+  }
+  else
+  {
+    // Reform the damping matrix for passive ds control
+    // float lambda1 = 80;
+    // float lambda2 = 50;
+    // Eigen::Matrix3f D;
+    // Eigen::Vector3f dir;
+
+    // if(_vdes.norm()> 1e-6)
+    // {
+    //   // if(!_firstControl)
+    //   // {
+    //   //   _firstControl = true;
+    //   //   dir = _vdes/_vdes.norm();
+    //   //   // _vdes/_vdes.norm();
+    //   // }
+    //   // else
+    //   // {
+    //   //   dir = _dir;
+    //   // }
+    //   dir = _vdes/_vdes.norm();
+    //   D = lambda1*(dir*dir.transpose())+lambda2*(Eigen::Matrix3f::Identity()-dir*dir.transpose());
+    // }
+    // else
+    // {
+    //   D = lambda2*Eigen::Matrix3f::Identity();
+    // }
+
+    // // // Compute force speed offset using the inverse of the passive ds controller damping matrix
+    Eigen::Vector3f vf;
+    // vf = D.inverse()*(_fc*_wRb.col(2));
+    // vf = (_C*_fc*_wRb.col(2));
+    vf = (_C*_fc*B.col(2));
+    _vdes += vf;
+
+    // // Compute force attractor offset using the inverse of the motion dynamics
+    // Eigen::Vector3f xf;
+    // xf = (B*L*B.transpose()).inverse()*vf;
+    // _vdes += _C*_fc*_wRb.col(2);
+    // _vdes += (B*L*B.transpose()*xf);
+
+    std::cerr << "vf: " << vf.transpose() << std::endl;
+    _contactForce.setConstant(0.0f);
+  }
+
+  // Bound speed  
+  if(_vdes.norm()>0.3f)
+  {
+    _vdes *= 0.3f/_vdes.norm();
+  }
+
+  // if(_vdes.norm()>1e-6)
+  // {
+  //   _dir = _vdes/_vdes.norm();
+  // }
 
 
   // Compute rotation error between current orientation and plane orientation
@@ -494,28 +896,28 @@ void ContactSurfaceController::processCursorEvent(float relX, float relY, bool n
     // Compute desired x, y velocities along x, y axis of world frame
     if(relX>MAX_XY_REL)
     {
-      _vuser(1) = -_linearVelocityLimit;
+      _vuser(1) = -_userVelocityLimit;
     }
     else if(relX < -MAX_XY_REL)
     {
-      _vuser(1) = _linearVelocityLimit;
+      _vuser(1) = _userVelocityLimit;
     }
     else
     {
-      _vuser(1) = -_linearVelocityLimit*relX/MAX_XY_REL;
+      _vuser(1) = -_userVelocityLimit*relX/MAX_XY_REL;
     }
 
     if(relY>MAX_XY_REL)
     {
-      _vuser(0) = -_linearVelocityLimit;
+      _vuser(0) = -_userVelocityLimit;
     }
     else if(relY < -MAX_XY_REL)
     {
-      _vuser(0) = _linearVelocityLimit;
+      _vuser(0) = _userVelocityLimit;
     }
     else
     {
-      _vuser(0) = -_linearVelocityLimit*relY/MAX_XY_REL;
+      _vuser(0) = -_userVelocityLimit*relY/MAX_XY_REL;
     }
 
     if(!_firstButton || !_buttonPressed)
@@ -695,10 +1097,10 @@ void ContactSurfaceController::updateRealPose(const geometry_msgs::Pose::ConstPt
     _pdes = _pcur;
     _qdes = _qcur;
     _vdes.setConstant(0.0f);
-    _dir = _wRb.col(2);
-    float s = -(_planeNormal.dot(_pcur-_p))/(_planeNormal.dot(_dir));
+    // _dir = _wRb.col(2);
+    // float s = -(_planeNormal.dot(_pcur-_p))/(_planeNormal.dot(_dir));
     // _taskAttractor = _pcur+s*_dir;
-    _angle = std::acos(_planeTangent.dot(_dir));
+    // _angle = std::acos(_planeTangent.dot(_dir));
     // xp = xcur;
 
   }
@@ -814,12 +1216,13 @@ void ContactSurfaceController::dynamicReconfigureCallback(foot_interfaces::conta
   ROS_INFO("Reconfigure request bou. Updatig the parameters ...");
 
   _convergenceRate = config.convergenceRate;
-  _xOffset = config.xOffset;
-  _yOffset = config.yOffset;
+  // _xOffset = config.xOffset;
+  // _yOffset = config.yOffset;
   _filteredForceGain = config.filteredForceGain;
   _contactForceThreshold = config.contactForceThreshold;
   _targetForce = config.targetForce;
   _polishing = config.polishing;
+  _linear = config.linear;
   _controlForce = config.controlForce;
 
   // _usePid = config.usePid;
@@ -830,8 +1233,10 @@ void ContactSurfaceController::dynamicReconfigureCallback(foot_interfaces::conta
   _A = config.A;
   _B = config.B;
   _C = config.C;
+  _splitForceFromMotion = config.splitForceFromMotion;
   _forceStiffnessRateGain = config.forceStiffnessRateGain;
   _forceDampingRateGain = config.forceDampingRateGain;
+  _userVelocityLimit = config.userVelocityLimit;
 
 }
 
