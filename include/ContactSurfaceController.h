@@ -212,6 +212,12 @@ class ContactSurfaceController
 	bool _linear;
 	float _userVelocityLimit;
 
+
+	Eigen::Matrix3f _Ma;
+	Eigen::Matrix3f _Da;
+	Eigen::Vector3f _xaDot;
+	float _maxAcc;
+
 	static ContactSurfaceController* me;
 
 			// Dynamic reconfigure (server+callback)
@@ -235,6 +241,8 @@ class ContactSurfaceController
     void computeCommand();
     void autonomousControl();
     void autonomousControl2();
+
+    void admittanceControl();
 
     void processCursorEvent(float relX, float relY, bool newEvent);
 

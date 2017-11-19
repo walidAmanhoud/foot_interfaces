@@ -140,6 +140,13 @@ ContactSurfaceController::ContactSurfaceController(ros::NodeHandle &n, double fr
   _xf = 0.0f;
   _xOffset = 0.0f;
   _yOffset = 0.0f;
+
+  _Ma.setIdentity();
+  _Ma *= 2.0f;
+  _Da.setIdentity();
+  _Da *= 10.0f;
+  _maxAcc = 2.0f;
+  _xaDot.setConstant(0.0f);
 }
 
 
@@ -865,6 +872,176 @@ void  ContactSurfaceController::autonomousControl()
   // q += 0.5f*_dt*dq;
   // q /= q.norm();
   // _qdes = q;   
+  _omegades += _wRb*wt;
+}
+
+
+void  ContactSurfaceController::admittanceControl()
+{
+  
+  // Extract linear speed, force and torque data
+  Eigen::Vector3f vcur = _twist.segment(0,3);
+  Eigen::Vector3f force = _filteredWrench.segment(0,3);  
+  Eigen::Vector3f torque = _filteredWrench.segment(3,3);
+
+  // Compute plane normal form markers position
+  _p1 = _plane1Position-_robotBasisPosition;
+  _p2 = _plane2Position-_robotBasisPosition;
+  _p3 = _plane3Position-_robotBasisPosition;
+  Eigen::Vector3f p13,p12;
+  p13 = _p3-_p1;
+  p12 = _p2-_p1;
+  p13 /= p13.norm();
+  p12 /= p12.norm();
+  _planeNormal = p13.cross(p12);
+
+  std::cerr << "plane normal: " << _planeNormal.transpose() << std::endl;
+
+  // Compute projected force and speed along plane normal vector
+  Eigen::Vector3f fn = (_planeNormal*_planeNormal.transpose())*(_wRb*force);
+  Eigen::Vector3f vn = (_planeNormal*_planeNormal.transpose())*vcur;
+
+  // Compute norm of the projected force along plane normal
+  _forceNorm = fn.norm();
+
+  // Compute vertical projection of the current position onto the plane
+  _xp = _pcur;
+  _xp(2) = (-_planeNormal(0)*(_xp(0)-_p3(0))-_planeNormal(1)*(_xp(1)-_p3(1))+_planeNormal(2)*_p3(2))/_planeNormal(2);
+  // _xp(2) = (-_planeNormal(0)*(_xp(0)-_p(0))-_planeNormal(1)*(_xp(1)-_p(1))+_planeNormal(2)*_p(2))/_planeNormal(2);
+
+  // Compute normal distance to the plane
+  float normalDistance = (_planeNormal*_planeNormal.transpose()*(_pcur-_xp)).norm();
+
+  // Compute canonical basis used to decompose the desired dynamics along the plane frame
+  // D = [-n o p]
+  Eigen::Vector3f temp;
+  temp << 1.0f,0.0f,0.0f;
+  Eigen::Matrix3f B;
+  B.col(0) = -_planeNormal;
+  B.col(1) = (Eigen::Matrix3f::Identity()-_planeNormal*_planeNormal.transpose())*temp;
+  B.col(1) = B.col(1)/(B.col(1).norm());
+  B.col(2) = (B.col(0)).cross(B.col(1));
+
+  // Compute Weighted diagonal matrix
+  Eigen::Matrix3f L = Eigen::Matrix3f::Zero();
+  L(0,0) = _convergenceRate*(1-std::tanh(10*normalDistance));
+  L(1,1) = _convergenceRate*(1-std::tanh(50*normalDistance));
+  L(2,2) = _convergenceRate*(1-std::tanh(50*normalDistance));
+  std::cerr << "normalDistance: " << normalDistance << " L: "<< L.diagonal().transpose() << std::endl;
+
+  // Compute fixed attractor on plane
+  Eigen::Vector3f xattractor;
+  xattractor = _p1+0.7*(_p2-_p1)+0.5*(_p3-_p1);
+
+
+  // Offset fixed attractor position based on mouse input
+  if(_linear || _polishing)
+  {
+    _xOffset += _vuser(0)*_dt;
+    _yOffset += _vuser(1)*_dt;
+    std::cerr << _xOffset << " " << _yOffset << std::endl;
+    xattractor(0) += _xOffset;
+    xattractor(1) += _yOffset;
+  }
+
+  // xattractor = _taskAttractor;
+  // xattractor(0) += _xOffset;
+  // xattractor(1) += _yOffset;
+  xattractor(2) = (-_planeNormal(0)*(xattractor(0)-_p1(0))-_planeNormal(1)*(xattractor(1)-_p1(1))+_planeNormal(2)*_p1(2))/_planeNormal(2);
+  // xattractor(2) = (-_planeNormal(0)*(xattractor(0)-_p(0))-_planeNormal(1)*(xattractor(1)-_p(1))+_planeNormal(2)*_p(2))/_planeNormal(2);
+  std::cerr << "xattractor: " << xattractor.transpose() << std::endl;
+
+
+  // Check if polishing motion is activated and compute desired velocity based on motion dynamics
+  // = sum of linear dynamics coming from moving and fixed attractors
+  Eigen::Vector3f x0Dot;
+  if(_polishing)
+  {
+    x0Dot = (B*L*B.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-B.col(0)*B.col(0).transpose())*getDesiredVelocity(_pcur,xattractor));
+    // x0Dot = (B*L*B.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-B.col(0)*B.col(0).transpose())*getDesiredVelocity(_pcur,xattractor)-_xf*_planeNormal);
+  }
+  else if(_linear)
+  {
+    x0Dot = (B*L*B.transpose())*((_xp-_pcur)+(Eigen::Matrix3f::Identity()-B.col(0)*B.col(0).transpose())*(xattractor-_pcur));
+  }
+  else
+  {
+    x0Dot = (B*L*B.transpose())*((_xp-_pcur));
+    // x0Dot = (B*L*B.transpose())*((_xp-_pcur)-_xf*_planeNormal);
+  }
+
+
+  // Check if force control activated and modify desired dynamics based on force error
+  if(_controlForce)
+  {
+    // Compute force error
+    Eigen::Vector3f xaDotDot;
+    Eigen::Vector3f forceError = (_targetForce-_forceNorm)*B.col(0);
+
+    //Compute admittance acceleration;
+    xaDotDot = _Ma.inverse()*(forceError-_Da*(_xaDot-x0Dot));
+
+    // Bound admittance acceleration
+    if(xaDotDot.norm()>_maxAcc)
+    {
+      xaDotDot *= _maxAcc/xaDotDot.norm();
+    }
+
+    // Compute admittance velocity
+    _xaDot += _dt*xaDotDot;
+    _contactForce.setConstant(0.0f);
+
+    _vdes = _xaDot;
+    std::cerr << "xaDot: " << _xaDot.transpose() << "x0Dot: " << x0Dot.transpose() << "xaDotDot: " << xaDotDot.transpose() << std::endl;
+  }
+  else
+  {
+    _vdes = x0Dot;
+    _contactForce.setConstant(0.0f);
+  }
+
+
+
+
+  // Bound speed  
+  if(_vdes.norm()>0.3f)
+  {
+    _vdes *= 0.3f/_vdes.norm();
+  }
+
+  // Compute rotation error between current orientation and plane orientation based on Rodrigues' law
+  Eigen::Vector3f k;
+  k = (-_wRb.col(2)).cross(_planeNormal);
+  float c = (-_wRb.col(2)).transpose()*_planeNormal;  
+  float s = k.norm();
+  k /= s;
+  Eigen::Matrix3f K;
+  K << 0.0f, -k(2), k(1),
+       k(2), 0.0f, -k(0),
+       -k(1), k(0), 0.0f;
+
+  Eigen::Matrix3f Re = Eigen::Matrix3f::Identity()+s*K+(1-c)*K*K;
+  
+  // Compute desired final quaternion on plane
+  float angle;
+  Eigen::Vector3f omega;
+  Eigen::Vector4f qtemp = rotationMatrixToQuaternion(Re);
+  Eigen::Vector4f qf = quaternionProduct(qtemp,_qcur);
+
+  // Perform quaternion slerp interpolation to progressively orient the end effector while approaching the plane
+  _qdes = slerpQuaternion(_qcur,qf,1-std::tanh(5*normalDistance));
+
+  // Compute needed angular velocity to perform the desired quaternion
+  Eigen::Vector4f qcurI, wq;
+  qcurI(0) = _qcur(0);
+  qcurI.segment(1,3) = -_qcur.segment(1,3);
+  wq = 5.0f*quaternionProduct(qcurI,_qdes-_qcur);
+  Eigen::Vector3f omegaTemp = _wRb*wq.segment(1,3);
+  _omegades = omegaTemp;
+
+  // Increase angular veloicty to correct angular torque
+  Eigen::Vector3f wt;
+  wt = _A*torque;  
   _omegades += _wRb*wt;
 }
 
