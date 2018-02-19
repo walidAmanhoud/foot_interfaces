@@ -218,12 +218,16 @@ class ContactSurfaceController
 	Eigen::Vector3f _xaDot;
 	float _maxAcc;
 
+	float _inertiaGain;
+	float _dampingGain;
 	static ContactSurfaceController* me;
 
 			// Dynamic reconfigure (server+callback)
 	dynamic_reconfigure::Server<foot_interfaces::contactSurfaceController_paramsConfig> _dynRecServer;
 	dynamic_reconfigure::Server<foot_interfaces::contactSurfaceController_paramsConfig>::CallbackType _dynRecCallback;
 
+	float _fm;
+	bool _oneMinuteClean;
 
 	public:
 

@@ -173,7 +173,7 @@ void FootMouseInterface::publishData()
     _footMouseMessage.filteredRelY = _filteredRelY;
     _footMouseMessage.filteredRelZ = _filteredRelZ;
 
-    std::cerr << "cursor: " << _footMouseMessage.relX << " " << _footMouseMessage.relY << " " << _footMouseMessage.relZ << std::endl;
+    // std::cerr << "cursor: " << _footMouseMessage.relX << " " << _footMouseMessage.relY << " " << _footMouseMessage.relZ << std::endl;
 
     // Publish foot mouse message
     _pubFootMouseData.publish(_footMouseMessage);

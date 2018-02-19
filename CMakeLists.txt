@@ -56,3 +56,9 @@ add_dependencies(contactTaskSharedControl ${PROJECT_NAME}_gencpp)
 add_executable(contactSurfaceController src/contactSurfaceController_node.cpp src/ContactSurfaceController.cpp)
 target_link_libraries(contactSurfaceController ${catkin_LIBRARIES})
 add_dependencies(contactSurfaceController ${PROJECT_NAME}_gencpp)
+
+FILE(GLOB SRCS src/FootMouseInterface.cpp src/FootMouseController.cpp src/FootMouseSharedControl.cpp src/ContactTaskSharedControl.cpp src/ContactSurfaceController.cpp)
+FILE(GLOB INCS src/FootMouseInterface.h src/FootMouseController.h src/FootMouseSharedControl.h src/ContactTaskSharedControl.h src/ContactSurfaceController.h)
+
+add_library(${PROJECT_NAME} ${SRCS} ${INCS} )
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})

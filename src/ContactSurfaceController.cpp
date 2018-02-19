@@ -144,9 +144,14 @@ ContactSurfaceController::ContactSurfaceController(ros::NodeHandle &n, double fr
   _Ma.setIdentity();
   _Ma *= 2.0f;
   _Da.setIdentity();
-  _Da *= 10.0f;
+  _Da *= 8.0f;
   _maxAcc = 2.0f;
   _xaDot.setConstant(0.0f);
+
+  _inertiaGain = 0.0f;
+  _dampingGain = 0.0f;
+
+  _fm = 0.0f;
 }
 
 
@@ -307,7 +312,8 @@ void  ContactSurfaceController::computeCommand()
     }
   }
 
-  autonomousControl();
+  // autonomousControl();
+  admittanceControl();
 }
 
 void  ContactSurfaceController::autonomousControl2()
@@ -650,7 +656,7 @@ void  ContactSurfaceController::autonomousControl()
 
   // Compute fixed attractor on plane
   Eigen::Vector3f xa;
-  xa = _p1+0.7*(_p2-_p1)+0.5*(_p3-_p1);
+  xa = _p1+0.5*(_p2-_p1)+0.5*(_p3-_p1);
 
   if(_linear || _polishing)
   {
@@ -931,7 +937,7 @@ void  ContactSurfaceController::admittanceControl()
 
   // Compute fixed attractor on plane
   Eigen::Vector3f xattractor;
-  xattractor = _p1+0.7*(_p2-_p1)+0.5*(_p3-_p1);
+  xattractor = _p1+0.5*(_p2-_p1)+0.5*(_p3-_p1);
 
 
   // Offset fixed attractor position based on mouse input
@@ -974,32 +980,74 @@ void  ContactSurfaceController::admittanceControl()
   // Check if force control activated and modify desired dynamics based on force error
   if(_controlForce)
   {
+
+    _fm+= _dt*(_targetForce-_fm);
+    _Ma.setIdentity();
+    _Ma *= _inertiaGain;
+    _Da.setIdentity();
+    _Da *= _dampingGain;
+
     // Compute force error
     Eigen::Vector3f xaDotDot;
-    Eigen::Vector3f forceError = (_targetForce-_forceNorm)*B.col(0);
+    // Eigen::Vector3f forceError = (_targetForce-_forceNorm)*B.col(0);
+    Eigen::Vector3f forceError = (_fm-_forceNorm)*B.col(0);
+
+
+
+    // Compute force stiffness rate gain from measured speed
+    float alpha = 1-std::tanh(50*vn.norm());
+
+    // Compute force damping damping rate gain from measured speed
+    float beta = 1-alpha;
+
+    // Integrate contact force dynamics
+    // _fc += _dt*(_forceStiffnessRateGain*(_fm-_forceNorm)-_forceDampingRateGain*_fm);
+    _fc += _dt*(_forceStiffnessRateGain*(_fm-_forceNorm));
+
+    // if(_fc < -15)
+    // {
+    //   _fc = -15;
+    // }
+    // else if(_fc > 30.0f)
+    // {
+    //   _fc = 30.0f;
+    // }
 
     //Compute admittance acceleration;
-    xaDotDot = _Ma.inverse()*(forceError-_Da*(_xaDot-x0Dot));
+    // xaDotDot = _Ma.inverse()*(forceError-_Da*(_xaDot-x0Dot));
+    xaDotDot = _Ma.inverse()*(_forceStiffnessRateGain*forceError-_Da*_xaDot);
+    // xaDotDot = _Ma.inverse()*(_fc*B.col(0)-_Da*(_xaDot-x0Dot));
+    // xaDotDot = _Ma.inverse()*(_fc*B.col(0)-_Da*_xaDot);
 
     // Bound admittance acceleration
-    if(xaDotDot.norm()>_maxAcc)
-    {
-      xaDotDot *= _maxAcc/xaDotDot.norm();
-    }
+    // if(xaDotDot.norm()>_maxAcc)
+    // {
+    //   xaDotDot *= _maxAcc/xaDotDot.norm();
+    // }
 
     // Compute admittance velocity
     _xaDot += _dt*xaDotDot;
     _contactForce.setConstant(0.0f);
 
-    _vdes = _xaDot;
-    std::cerr << "xaDot: " << _xaDot.transpose() << "x0Dot: " << x0Dot.transpose() << "xaDotDot: " << xaDotDot.transpose() << std::endl;
+    // _vdes = _xaDot;
+    _vdes = _xaDot+x0Dot;
+    std::cerr << "xaDot: " << _xaDot.transpose() << " x0Dot: " << x0Dot.transpose() << std::endl;
+    std::cerr << "fc: " << _fc << std::endl;
   }
   else
   {
+    _xaDot.setConstant(0.0f);
     _vdes = x0Dot;
     _contactForce.setConstant(0.0f);
+    _fm = 0.0f;
+    _fc = 0.0f;
   }
 
+  // // // Bound speed  
+  // if(_xaDot.norm()>0.3f)
+  // {
+  //   _xaDot *= 0.3f/_xaDot.norm();
+  // }
 
 
 
@@ -1414,6 +1462,8 @@ void ContactSurfaceController::dynamicReconfigureCallback(foot_interfaces::conta
   _forceStiffnessRateGain = config.forceStiffnessRateGain;
   _forceDampingRateGain = config.forceDampingRateGain;
   _userVelocityLimit = config.userVelocityLimit;
+  _inertiaGain = config.inertiaGain;
+  _dampingGain = config.dampingGain;
 
 }
 
@@ -1583,7 +1633,7 @@ void ContactSurfaceController::quaternionToAxisAngle(Eigen::Vector4f q, Eigen::V
 
 //  // double alpha = Convergence_Rate_ * Convergence_Rate_scale_;
 //  // double omega = Cycle_speed_ + Cycle_speed_offset_;
- float r = 0.05f;
+ float r = 0.025f;
  float omega = M_PI;
 
   velocity(0) = -(R-r) * cos(T) - R * omega * sin(T);
